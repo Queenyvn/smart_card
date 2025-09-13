@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'edit_profile.dart';
 
-// Import placeholder pages (create these in /pages/)
+// Import placeholder pages
 import 'announcement_page.dart';
 import 'messages_page.dart';
 import 'about_us_page.dart';
@@ -29,7 +29,7 @@ class _MenuPageState extends State<MenuPage> {
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.black),
-          onPressed: () => Navigator.pop(context), // ✅ Back to previous page
+          onPressed: () => Navigator.pop(context), //  Back to previous page
         ),
       ),
       body: SafeArea(
@@ -57,7 +57,7 @@ class _MenuPageState extends State<MenuPage> {
                         ),
                       ),
 
-                      // 🔽 Edit Profile link with hover effect
+                      //  Edit Profile link with hover effect
                       MouseRegion(
                         onEnter: (_) => setState(() => _isHovering = true),
                         onExit: (_) => setState(() => _isHovering = false),
@@ -158,7 +158,7 @@ class _MenuPageState extends State<MenuPage> {
                     // Navigate back to LoginPage and clear navigation stack
                     Navigator.pushNamedAndRemoveUntil(
                       context,
-                      '/login', // Make sure '/login' is defined in your routes in main.dart
+                      '/login', //  '/login' is defined in routes in main.dart
                       (route) => false,
                     );
                   },
