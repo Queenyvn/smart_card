@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'edit_profile.dart'; // for full form
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
@@ -151,8 +152,12 @@ class _RegisterPageState extends State<RegisterPage> {
             ElevatedButton(
               onPressed: () {
                 if (_acceptTerms) {
-                  // Navigate to menu after successful registration
-                  Navigator.pushReplacementNamed(context, '/menu');
+                  Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const EditProfilePage(fromRegister: true),
+                    ),
+                  );
                 } else {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(

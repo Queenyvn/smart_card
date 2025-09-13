@@ -20,3 +20,4 @@ class AnalyticsPage extends StatelessWidget {
     );
   }
 }
+

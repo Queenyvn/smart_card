@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
 class EditProfilePage extends StatefulWidget {
-  const EditProfilePage({super.key});
+  final bool fromRegister;
+
+  const EditProfilePage({super.key, this.fromRegister = false});
 
   @override
   State<EditProfilePage> createState() => _EditProfilePageState();
