@@ -51,7 +51,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
     return Scaffold(
       backgroundColor: Colors.grey[100],
       appBar: AppBar(
-        title: const Text("Edit Profile"),
+        title: Text(widget.fromRegister ? "Complete Profile" : "Edit Profile"),
         backgroundColor: Colors.red,
         elevation: 0,
         leading: IconButton(
@@ -100,9 +100,13 @@ class _EditProfilePageState extends State<EditProfilePage> {
                 elevation: 2,
               ),
               icon: const Icon(Icons.check, color: Colors.white),
-              label: const Text(
-                "Save Changes",
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+              label: Text(
+                widget.fromRegister ? "Submit" : "Save Changes",
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
               ),
             ),
           ],
@@ -232,8 +236,17 @@ class _EditProfilePageState extends State<EditProfilePage> {
 
   void _saveProfile() {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Profile saved successfully!')),
+      SnackBar(
+        content: Text(widget.fromRegister
+            ? 'Profile submitted successfully!'
+            : 'Profile saved successfully!'),
+      ),
     );
-    Navigator.pop(context);
+
+    if (widget.fromRegister) {
+      Navigator.pushReplacementNamed(context, '/home');
+    } else {
+      Navigator.pop(context);
+    }
   }
 }

@@ -1,0 +1,12 @@
+{
+  "flutter": {
+    "platforms": {
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "smartcard-8ebea",
+          "configurations": {}
+        }
+      }
+    }
+  }
+}

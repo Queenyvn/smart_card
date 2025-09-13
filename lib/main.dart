@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart'; // auto-generated
 
-// Import your pages
+// Import pages
 import 'pages/login_page.dart';
 import 'pages/register_page.dart';
 import 'pages/edit_profile.dart';
@@ -16,8 +18,49 @@ import 'pages/settings_page.dart';
 import 'pages/user_profile.dart';
 
 void main() {
-  runApp(const SmartCallingCardApp());
+  WidgetsFlutterBinding.ensureInitialized();
+  runApp(const AppInitializer());
 }
+
+class AppInitializer extends StatelessWidget {
+  const AppInitializer({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    // Initialize Firebase here, inside build
+    final Future<FirebaseApp> _firebaseInitialization =
+        Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+    return FutureBuilder(
+      future: _firebaseInitialization,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return MaterialApp(
+            home: Scaffold(
+              body: Center(
+                child: Text(
+                  'Firebase Initialization Error:\n${snapshot.error}',
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ),
+          );
+        }
+
+        if (snapshot.connectionState == ConnectionState.done) {
+          return const SmartCallingCardApp(); // Your existing app
+        }
+
+        return const MaterialApp(
+          home: Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          ),
+        );
+      },
+    );
+  }
+}
+
 
 class SmartCallingCardApp extends StatelessWidget {
   const SmartCallingCardApp({super.key});
@@ -28,14 +71,10 @@ class SmartCallingCardApp extends StatelessWidget {
       title: 'Smart Digital Calling Card',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        primarySwatch: Colors.red, // CBOC Red Branding
+        primarySwatch: Colors.red,
         visualDensity: VisualDensity.adaptivePlatformDensity,
       ),
-
-      // Start with Login Page
       initialRoute: '/login',
-
-      // Define routes for navigation
       routes: {
         '/login': (context) => const LoginPage(),
         '/register': (context) => const RegisterPage(),
