@@ -151,11 +151,16 @@ class _MenuPageState extends State<MenuPage> {
                 ),
               ),
 
-              /// === SIGN OUT BUTTON ===
+             /// === SIGN OUT BUTTON ===
               Center(
                 child: ElevatedButton.icon(
                   onPressed: () {
-                    // TODO: Add logout functionality
+                    // Navigate back to LoginPage and clear navigation stack
+                    Navigator.pushNamedAndRemoveUntil(
+                      context,
+                      '/login', // Make sure '/login' is defined in your routes in main.dart
+                      (route) => false,
+                    );
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.red.shade700,

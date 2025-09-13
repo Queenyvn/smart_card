@@ -167,7 +167,7 @@ class _HomePageState extends State<HomePage> {
               ),
               const SizedBox(height: 24),
 
-              /// 👥 RECENTLY INTERACTED
+              /// RECENTLY INTERACTED USERS
               const Text("Recently Interacted With...",
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               const SizedBox(height: 12),
