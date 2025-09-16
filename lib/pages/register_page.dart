@@ -301,13 +301,13 @@
 
               //Google Sign In Button
               ElevatedButton.icon(
-                icon: const Icon(Icons.g_mobiledata, color: Colors.white),
+                icon: const Icon(Icons.g_mobiledata, color: Colors.red, size: 30),
                 label: const Text(
                   "Register with Google",
-                  style: TextStyle(color: Colors.white),
+                  style: TextStyle(color: Colors.red),
                 ),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.red,
+                  backgroundColor: Colors.grey[300],
                   minimumSize: const Size(double.infinity, 50),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
@@ -327,7 +327,7 @@
                       'uid': user.uid,
                       'createdAt': Timestamp.now(),
                     }
-                    )
+                    );
 
                     Navigator.pushReplacement(
                       context,
