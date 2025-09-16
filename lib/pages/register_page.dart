@@ -1,7 +1,7 @@
   import 'package:flutter/material.dart';
   import 'package:firebase_auth/firebase_auth.dart';
   import 'package:cloud_firestore/cloud_firestore.dart';
-  iimport '../providers/google_sign_in/google_sign_in.dart';
+  import '../providers/google_sign_in_provider.dart';
   import 'edit_profile.dart'; // for full form
 
   class RegisterPage extends StatefulWidget {
@@ -304,12 +304,12 @@
                 icon: const Icon(Icons.g_mobiledata, color: Colors.white),
                 label: const Text(
                   "Register with Google",
-                  style: TextStyleColor(color: Colors.white),
+                  style: TextStyle(color: Colors.white),
                 ),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.red,
                   minimumSize: const Size(double.infinity, 50),
-                  shape: RoundedRectangleBoarder(
+                  shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
                 ),
@@ -320,13 +320,14 @@
                   //SAVE USER TO FIRESTORE IF NEW AWAIT//
                   if (user != null) {
                     FirebaseFirestore.instance.collection('users').doc(user.uid).set({
-                      'firstName': _userFirstNameController.text.trim(),
-                      'lastName': _userLastNameController.text.trim(),
-                      'username': usernameController.text.trim.trim(),
+                      'firstName': _firstNameController.text.trim(),
+                      'lastName': _lastNameController.text.trim(),
+                      'username': _usernameController.text.trim(),
                       'email': user.email,
                       'uid': user.uid,
                       'createdAt': Timestamp.now(),
-                    }),
+                    }
+                    )
 
                     Navigator.pushReplacement(
                       context,
@@ -334,7 +335,7 @@
                         builder: (context) => EditProfilePage(fromRegister: true),
                       ),
                     );
-                  },
+                  };
                 },
 
               ),
