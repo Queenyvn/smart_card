@@ -1,316 +1,357 @@
-import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'edit_profile.dart'; // for full form
+  import 'package:flutter/material.dart';
+  import 'package:firebase_auth/firebase_auth.dart';
+  import 'package:cloud_firestore/cloud_firestore.dart';
+  iimport '../providers/google_sign_in/google_sign_in.dart';
+  import 'edit_profile.dart'; // for full form
 
-class RegisterPage extends StatefulWidget {
-  const RegisterPage({super.key});
+  class RegisterPage extends StatefulWidget {
+    const RegisterPage({super.key});
 
-  @override
-  State<RegisterPage> createState() => _RegisterPageState();
-}
-
-class _RegisterPageState extends State<RegisterPage> {
-  final TextEditingController _firstNameController = TextEditingController();
-  final TextEditingController _lastNameController = TextEditingController();
-  final TextEditingController _usernameController = TextEditingController(); 
-  final TextEditingController _emailController = TextEditingController();
-  final TextEditingController _passwordController = TextEditingController();
-  final TextEditingController _confirmPasswordController = TextEditingController();
-
-  bool _acceptTerms = false;
-  bool _isLoading = false;
-  String? _errorMessage;
-
-  @override
-  void dispose() {
-    _firstNameController.dispose();
-    _lastNameController.dispose();
-    _usernameController.dispose();
-    _emailController.dispose();
-    _passwordController.dispose();
-    _confirmPasswordController.dispose();
-    super.dispose();
+    @override
+    State<RegisterPage> createState() => _RegisterPageState();
   }
 
-  Future<void> _registerUser() async {
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
+  class _RegisterPageState extends State<RegisterPage> {
+    final TextEditingController _firstNameController = TextEditingController();
+    final TextEditingController _lastNameController = TextEditingController();
+    final TextEditingController _usernameController = TextEditingController(); 
+    final TextEditingController _emailController = TextEditingController();
+    final TextEditingController _passwordController = TextEditingController();
+    final TextEditingController _confirmPasswordController = TextEditingController();
 
-    final username = _usernameController.text.trim();
-    final email = _emailController.text.trim();
-    final password = _passwordController.text.trim();
-    final confirmPassword = _confirmPasswordController.text.trim();
+    bool _acceptTerms = false;
+    bool _isLoading = false;
+    String? _errorMessage;
 
-    if (username.isEmpty ||
-        email.isEmpty ||
-        password.isEmpty ||
-        confirmPassword.isEmpty) {
-      setState(() {
-        _errorMessage = "Please fill out all fields.";
-        _isLoading = false;
-      });
-      return;
+    @override
+    void dispose() {
+      _firstNameController.dispose();
+      _lastNameController.dispose();
+      _usernameController.dispose();
+      _emailController.dispose();
+      _passwordController.dispose();
+      _confirmPasswordController.dispose();
+      super.dispose();
     }
 
-    if (password != confirmPassword) {
+    Future<void> _registerUser() async {
       setState(() {
-        _errorMessage = "Passwords do not match.";
-        _isLoading = false;
+        _isLoading = true;
+        _errorMessage = null;
       });
-      return;
-    }
 
-    try {
-      // Check if username already exists
-      final usernameQuery = await FirebaseFirestore.instance
-          .collection('usernames')
-          .where('username', isEqualTo: username)
-          .get();
+      final username = _usernameController.text.trim();
+      final email = _emailController.text.trim();
+      final password = _passwordController.text.trim();
+      final confirmPassword = _confirmPasswordController.text.trim();
 
-      if (usernameQuery.docs.isNotEmpty) {
+      if (username.isEmpty ||
+          email.isEmpty ||
+          password.isEmpty ||
+          confirmPassword.isEmpty) {
         setState(() {
-          _errorMessage = "Username already taken.";
+          _errorMessage = "Please fill out all fields.";
           _isLoading = false;
         });
         return;
       }
 
-      // Create user in Firebase Auth
-      UserCredential userCredential =
-          await FirebaseAuth.instance.createUserWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
+      if (password != confirmPassword) {
+        setState(() {
+          _errorMessage = "Passwords do not match.";
+          _isLoading = false;
+        });
+        return;
+      }
 
-      // Save username → email mapping in Firestore
-      await FirebaseFirestore.instance.collection('usernames').add({
-        'username': username,
-        'email': email,
-        'firstName': _firstNameController.text.trim(),
-        'lastName': _lastNameController.text.trim(),
-        'uid': userCredential.user!.uid,
-      });
+      try {
+        // Check if username already exists
+        final usernameQuery = await FirebaseFirestore.instance
+            .collection('usernames')
+            .where('username', isEqualTo: username)
+            .get();
 
-      // Navigate to full profile form
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (context) => EditProfilePage(fromRegister: true),
+        if (usernameQuery.docs.isNotEmpty) {
+          setState(() {
+            _errorMessage = "Username already taken.";
+            _isLoading = false;
+          });
+          return;
+        }
+
+        // Create user in Firebase Auth
+        UserCredential userCredential =
+            await FirebaseAuth.instance.createUserWithEmailAndPassword(
+          email: email,
+          password: password,
+        );
+
+        // Save username → email mapping in Firestore
+        await FirebaseFirestore.instance.collection('usernames').add({
+          'username': username,
+          'email': email,
+          'firstName': _firstNameController.text.trim(),
+          'lastName': _lastNameController.text.trim(),
+          'uid': userCredential.user!.uid,
+        });
+
+        // Navigate to full profile form
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => EditProfilePage(fromRegister: true),
+          ),
+        );
+      } on FirebaseAuthException catch (e) {
+        setState(() {
+          if (e.code == 'email-already-in-use') {
+            _errorMessage = "This email is already registered.";
+          } else if (e.code == 'invalid-email') {
+            _errorMessage = "The email address is badly formatted.";
+          } else if (e.code == 'weak-password') {
+            _errorMessage = "Password should be at least 6 characters.";
+          } else {
+            _errorMessage = "Registration failed: ${e.message}";
+          }
+          _isLoading = false;
+        });
+      } catch (e) {
+        setState(() {
+          _errorMessage = "An error occurred. Please try again.";
+          _isLoading = false;
+        });
+      }
+    }
+
+    @override
+    Widget build(BuildContext context) {
+      return Scaffold(
+        backgroundColor: Colors.white,
+        appBar: AppBar(
+          backgroundColor: const Color(0xFFD32F2F), 
+          title: const Text("Register"),
+          centerTitle: true,
+        ),
+        body: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            children: [
+              const SizedBox(height: 20),
+
+              // First & Last Name
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _firstNameController,
+                      decoration: InputDecoration(
+                        labelText: "First Name",
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        prefixIcon: const Icon(Icons.person),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: TextField(
+                      controller: _lastNameController,
+                      decoration: InputDecoration(
+                        labelText: "Last Name",
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        prefixIcon: const Icon(Icons.person_outline),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+
+              // Username
+              TextField(
+                controller: _usernameController,
+                decoration: InputDecoration(
+                  labelText: "Username",
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  prefixIcon: const Icon(Icons.person),
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // Email
+              TextField(
+                controller: _emailController,
+                decoration: InputDecoration(
+                  labelText: "Email",
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  prefixIcon: const Icon(Icons.email),
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // Password
+              TextField(
+                controller: _passwordController,
+                obscureText: true,
+                decoration: InputDecoration(
+                  labelText: "Password",
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  prefixIcon: const Icon(Icons.lock),
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // Confirm Password
+              TextField(
+                controller: _confirmPasswordController,
+                obscureText: true,
+                decoration: InputDecoration(
+                  labelText: "Confirm Password",
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  prefixIcon: const Icon(Icons.lock_outline),
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // Terms & Privacy Policy
+              Row(
+                children: [
+                  Checkbox(
+                    value: _acceptTerms,
+                    onChanged: (value) {
+                      setState(() {
+                        _acceptTerms = value ?? false;
+                      });
+                    },
+                    activeColor: const Color(0xFFD32F2F), // CBOC Red
+                  ),
+                  Expanded(
+                    child: RichText(
+                      text: const TextSpan(
+                        style: TextStyle(color: Colors.black),
+                        children: [
+                          TextSpan(text: "I accept "),
+                          TextSpan(
+                            text: "terms and privacy policy",
+                            style: TextStyle(
+                              color: Colors.red,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+
+              // Error Message
+              if (_errorMessage != null)
+                Text(
+                  _errorMessage!,
+                  style: const TextStyle(color: Colors.red),
+                ),
+              if (_errorMessage != null) const SizedBox(height: 10),
+
+              // Register Button
+              _isLoading
+                  ? const CircularProgressIndicator(color: Colors.red)
+                  : ElevatedButton(
+                      onPressed: () {
+                        if (_acceptTerms) {
+                          _registerUser();
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                  "Please accept the terms and privacy policy."),
+                            ),
+                          );
+                        }
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFD32F2F), // CBOC Red
+                        minimumSize: const Size(double.infinity, 50),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: const Text(
+                        "Continue",
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+              const SizedBox(height: 20),
+
+              //Google Sign In Button
+              ElevatedButton.icon(
+                icon: const Icon(Icons.g_mobiledata, color: Colors.white),
+                label: const Text(
+                  "Register with Google",
+                  style: TextStyleColor(color: Colors.white),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red,
+                  minimumSize: const Size(double.infinity, 50),
+                  shape: RoundedRectangleBoarder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                onPressed: () async {
+                  final googleProvider = GoogleSignInProvider();
+                  final user = await googleProvider.signInWithGoogle();
+
+                  //SAVE USER TO FIRESTORE IF NEW AWAIT//
+                  if (user != null) {
+                    FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+                      'firstName': _userFirstNameController.text.trim(),
+                      'lastName': _userLastNameController.text.trim(),
+                      'username': usernameController.text.trim.trim(),
+                      'email': user.email,
+                      'uid': user.uid,
+                      'createdAt': Timestamp.now(),
+                    }),
+
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => EditProfilePage(fromRegister: true),
+                      ),
+                    );
+                  },
+                },
+
+              ),
+
+              // Already Have Account? Login
+              TextButton(
+                onPressed: () {
+                  Navigator.pushReplacementNamed(context, '/login');
+                },
+                child: const Text(
+                  "Already have an account? Log In here",
+                  style: TextStyle(color: Colors.black87),
+                ),
+              ),
+            ],
+          ),
         ),
       );
-    } on FirebaseAuthException catch (e) {
-      setState(() {
-        if (e.code == 'email-already-in-use') {
-          _errorMessage = "This email is already registered.";
-        } else if (e.code == 'invalid-email') {
-          _errorMessage = "The email address is badly formatted.";
-        } else if (e.code == 'weak-password') {
-          _errorMessage = "Password should be at least 6 characters.";
-        } else {
-          _errorMessage = "Registration failed: ${e.message}";
-        }
-        _isLoading = false;
-      });
-    } catch (e) {
-      setState(() {
-        _errorMessage = "An error occurred. Please try again.";
-        _isLoading = false;
-      });
     }
   }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        backgroundColor: const Color(0xFFD32F2F), 
-        title: const Text("Register"),
-        centerTitle: true,
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          children: [
-            const SizedBox(height: 20),
-
-            // First & Last Name
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _firstNameController,
-                    decoration: InputDecoration(
-                      labelText: "First Name",
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      prefixIcon: const Icon(Icons.person),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: TextField(
-                    controller: _lastNameController,
-                    decoration: InputDecoration(
-                      labelText: "Last Name",
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      prefixIcon: const Icon(Icons.person_outline),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-
-            // Username
-            TextField(
-              controller: _usernameController,
-              decoration: InputDecoration(
-                labelText: "Username",
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                prefixIcon: const Icon(Icons.person),
-              ),
-            ),
-            const SizedBox(height: 20),
-
-            // Email
-            TextField(
-              controller: _emailController,
-              decoration: InputDecoration(
-                labelText: "Email",
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                prefixIcon: const Icon(Icons.email),
-              ),
-            ),
-            const SizedBox(height: 20),
-
-            // Password
-            TextField(
-              controller: _passwordController,
-              obscureText: true,
-              decoration: InputDecoration(
-                labelText: "Password",
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                prefixIcon: const Icon(Icons.lock),
-              ),
-            ),
-            const SizedBox(height: 20),
-
-            // Confirm Password
-            TextField(
-              controller: _confirmPasswordController,
-              obscureText: true,
-              decoration: InputDecoration(
-                labelText: "Confirm Password",
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                prefixIcon: const Icon(Icons.lock_outline),
-              ),
-            ),
-            const SizedBox(height: 20),
-
-            // Terms & Privacy Policy
-            Row(
-              children: [
-                Checkbox(
-                  value: _acceptTerms,
-                  onChanged: (value) {
-                    setState(() {
-                      _acceptTerms = value ?? false;
-                    });
-                  },
-                  activeColor: const Color(0xFFD32F2F), // CBOC Red
-                ),
-                Expanded(
-                  child: RichText(
-                    text: const TextSpan(
-                      style: TextStyle(color: Colors.black),
-                      children: [
-                        TextSpan(text: "I accept "),
-                        TextSpan(
-                          text: "terms and privacy policy",
-                          style: TextStyle(
-                            color: Colors.red,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-
-            // Error Message
-            if (_errorMessage != null)
-              Text(
-                _errorMessage!,
-                style: const TextStyle(color: Colors.red),
-              ),
-            if (_errorMessage != null) const SizedBox(height: 10),
-
-            // Register Button
-            _isLoading
-                ? const CircularProgressIndicator(color: Colors.red)
-                : ElevatedButton(
-                    onPressed: () {
-                      if (_acceptTerms) {
-                        _registerUser();
-                      } else {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text(
-                                "Please accept the terms and privacy policy."),
-                          ),
-                        );
-                      }
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFD32F2F), // CBOC Red
-                      minimumSize: const Size(double.infinity, 50),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: const Text(
-                      "Continue",
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-            const SizedBox(height: 20),
-
-            // Already Have Account? Login
-            TextButton(
-              onPressed: () {
-                Navigator.pushReplacementNamed(context, '/login');
-              },
-              child: const Text(
-                "Already have an account? Log In here",
-                style: TextStyle(color: Colors.black87),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
