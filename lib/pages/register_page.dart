@@ -13,7 +13,7 @@ class RegisterPage extends StatefulWidget {
 class _RegisterPageState extends State<RegisterPage> {
   final TextEditingController _firstNameController = TextEditingController();
   final TextEditingController _lastNameController = TextEditingController();
-  final TextEditingController _usernameController = TextEditingController(); // NEW
+  final TextEditingController _usernameController = TextEditingController(); 
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _confirmPasswordController = TextEditingController();
@@ -98,7 +98,7 @@ class _RegisterPageState extends State<RegisterPage> {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-          builder: (context) => const EditProfilePage(fromRegister: true),
+          builder: (context) => EditProfilePage(fromRegister: true),
         ),
       );
     } on FirebaseAuthException catch (e) {
@@ -127,7 +127,7 @@ class _RegisterPageState extends State<RegisterPage> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        backgroundColor: const Color(0xFFD32F2F), // CBOC Red
+        backgroundColor: const Color(0xFFD32F2F), 
         title: const Text("Register"),
         centerTitle: true,
       ),

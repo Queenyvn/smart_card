@@ -35,7 +35,7 @@ class _LoginPageState extends State<LoginPage> {
 
     if (username.isEmpty || password.isEmpty) {
       setState(() {
-        _errorMessage = "Please enter both username and password.";
+        _errorMessage = "Please enter your username and password.";
         _isLoading = false;
       });
       return;
