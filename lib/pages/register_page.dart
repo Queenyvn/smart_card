@@ -300,34 +300,29 @@
               const SizedBox(height: 20),
 
               //Google Sign In Button
-              ElevatedButton.icon(
-                icon: const Icon(Icons.g_mobiledata, color: Colors.red, size: 30),
-                label: const Text(
-                  "Register with Google",
-                  style: TextStyle(color: Colors.red),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.grey[200],
-                  minimumSize: const Size(double.infinity, 50),
+              OutlinedButton(
+                style: OutlinedButton.styleFrom(
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(30),
                   ),
+                  side: const BorderSide(color: Colors.grey),
+                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
+                  backgroundColor: Colors.white,
+                  minimumSize: const Size(double.infinity, 50),
                 ),
                 onPressed: () async {
                   final googleProvider = GoogleSignInProvider();
                   final user = await googleProvider.signInWithGoogle();
 
-                  //SAVE USER TO FIRESTORE IF NEW AWAIT//
                   if (user != null) {
-                    FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+                    await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
                       'firstName': _firstNameController.text.trim(),
                       'lastName': _lastNameController.text.trim(),
                       'username': _usernameController.text.trim(),
                       'email': user.email,
                       'uid': user.uid,
                       'createdAt': Timestamp.now(),
-                    }
-                    );
+                    });
 
                     Navigator.pushReplacement(
                       context,
@@ -335,10 +330,29 @@
                         builder: (context) => EditProfilePage(fromRegister: true),
                       ),
                     );
-                  };
+                  }
                 },
-
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Image.asset(
+                      'assets/google_logo.png', // <-- add your Google "G" logo here
+                      height: 24,
+                    ),
+                    const SizedBox(width: 12),
+                    const Text(
+                      "Sign up with Google",
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: Colors.black87,
+                      ),
+                    ),
+                  ],
+                ),
               ),
+
+              // END OF Google Sign In Button CODE //
+
 
               // Already Have Account? Login
               TextButton(
