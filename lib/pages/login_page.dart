@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../providers/google_sign_in_provider.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -220,7 +221,7 @@ class _LoginPageState extends State<LoginPage> {
               Column(
                 children: [
 
-                  OutlinedButton.(
+                  OutlinedButton(
                     style: OutlinedButton.styleFrom(
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(30),
@@ -232,18 +233,36 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                     onPressed: () async {
                       final googleProvider = GoogleSignInProvider();
-                      final user = await googleProvider.SignInWithGoogle();
+                      final user = await googleProvider.signInWithGoogle();
 
-                      if (user ! = null) {
-                        await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
-                          'email': user.email,
-                          'displayName': user.displayName ?? '',
-                          'photoUrl': user.photoURL ?? '',
-                        }, SetOptions(merge: true));
+                      if (user != null) {
+                        // Check if user already exists in Firestore
+                        final userDoc = await FirebaseFirestore.instance
+                            .collection('users')
+                            .doc(user.uid)
+                            .get();
 
-                        Navigator.pushReplacementNamed(context, '/home');
+                        if (userDoc.exists) {
+                          // Existing user to home
+                          Navigator.pushReplacementNamed(context, '/home');
+                        } else {
+                          // New user | save minimal info first
+                          await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+                            'email': user.email,
+                            'displayName': user.displayName ?? '',
+                            'photoUrl': user.photoURL ?? '',
+                            'createdAt': Timestamp.now(),
+                          });
+
+                          // Redirect to RegisterPage to complete profile
+                          Navigator.pushReplacementNamed(context, '/register');
+                        }
+                      } else {
+                        setState(() {
+                          _errorMessage = "Google sign-in failed. Please try again.";
+                        });
                       }
-                    }
+                    },
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
