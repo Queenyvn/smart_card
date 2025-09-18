@@ -236,17 +236,17 @@ class _LoginPageState extends State<LoginPage> {
                       final user = await googleProvider.signInWithGoogle();
 
                       if (user != null) {
-                        // Check if user already exists in Firestore
+                        // CHECK IF USER EXISTS IN FIRESTORE
                         final userDoc = await FirebaseFirestore.instance
                             .collection('users')
                             .doc(user.uid)
                             .get();
 
                         if (userDoc.exists) {
-                          // Existing user to home
+                          // EREDIRECT USER TO HOME PAGE
                           Navigator.pushReplacementNamed(context, '/home');
                         } else {
-                          // New user | save minimal info first
+                          // NEW USER | save minimal info first
                           await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
                             'email': user.email,
                             'displayName': user.displayName ?? '',
@@ -254,7 +254,7 @@ class _LoginPageState extends State<LoginPage> {
                             'createdAt': Timestamp.now(),
                           });
 
-                          // Redirect to RegisterPage to complete profile
+                          // REDIRECT TO REGISTER PAGE TO COMPLETE REGISTRATION
                           Navigator.pushReplacementNamed(context, '/register');
                         }
                       } else {
