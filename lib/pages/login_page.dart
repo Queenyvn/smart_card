@@ -216,27 +216,58 @@ class _LoginPageState extends State<LoginPage> {
               ),
               const SizedBox(height: 20),
 
-              // Social login placeholders
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
+              // google sign in button
+              Column(
                 children: [
-                  IconButton(
-                    icon: const Icon(Icons.phone, color: Colors.green),
-                    onPressed: () {},
-                  ),
-                  const SizedBox(width: 20),
-                  IconButton(
-                    icon: const Icon(Icons.email, color: Colors.red),
-                    onPressed: () {},
-                  ),
-                  const SizedBox(width: 20),
-                  IconButton(
-                    icon: const Icon(Icons.facebook, color: Colors.blue),
-                    onPressed: () {},
+
+                  OutlinedButton.(
+                    style: OutlinedButton.styleFrom(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(30),
+                      ),
+                      side: const BorderSide(color: Colors.grey),
+                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
+                      backgroundColor: Colors.white,
+                      minimumSize: const Size(double.infinity, 50),
+                    ),
+                    onPressed: () async {
+                      final googleProvider = GoogleSignInProvider();
+                      final user = await googleProvider.SignInWithGoogle();
+
+                      if (user ! = null) {
+                        await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+                          'email': user.email,
+                          'displayName': user.displayName ?? '',
+                          'photoUrl': user.photoURL ?? '',
+                        }, SetOptions(merge: true));
+
+                        Navigator.pushReplacementNamed(context, '/home');
+                      }
+                    }
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Image.asset(
+                          'assets/google_logo.png',
+                          height: 24,
+                        ),
+                        const SizedBox(width: 12),
+                        const Text(
+                          "Sign in with Google",
+                          style: TextStyle(
+                            color: Colors.black87,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        )
+                      ],
+                    ),
                   ),
                 ],
-              ),
+              ),                            
               const SizedBox(height: 30),
+              // END OF GOOGLE SIGN IN CODE //
+
 
               // Register Text with hover effect
               MouseRegion(
