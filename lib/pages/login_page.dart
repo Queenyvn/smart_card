@@ -236,31 +236,31 @@ class _LoginPageState extends State<LoginPage> {
                       final user = await googleProvider.signInWithGoogle();
 
                       if (user != null) {
-                        // CHECK IF USER EXISTS IN FIRESTORE
+                        // Check if user already exists in Firestore
                         final userDoc = await FirebaseFirestore.instance
                             .collection('users')
                             .doc(user.uid)
                             .get();
 
                         if (userDoc.exists) {
-                          // EREDIRECT USER TO HOME PAGE
+                          // REDIRECT TO HOME PAGE IF ALREADY REGISTERED //
                           Navigator.pushReplacementNamed(context, '/home');
                         } else {
-                          // NEW USER | save minimal info first
-                          await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
-                            'email': user.email,
-                            'displayName': user.displayName ?? '',
-                            'photoUrl': user.photoURL ?? '',
-                            'createdAt': Timestamp.now(),
-                          });
-
-                          // REDIRECT TO REGISTER PAGE TO COMPLETE REGISTRATION
-                          Navigator.pushReplacementNamed(context, '/register');
+                          // REDIRECT TO REGISTRATION PAGE IF NEW USER //
+                          // (pass Google email so they don’t need to type it again) //
+                          Navigator.pushReplacementNamed(
+                            context,
+                            '/register',
+                            arguments: {
+                              'email': user.email,
+                              'displayName': user.displayName ?? '',
+                            },
+                          );
                         }
                       } else {
-                        setState(() {
-                          _errorMessage = "Google sign-in failed. Please try again.";
-                        });
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text("Google sign-in failed. Please try again.")),
+                        );
                       }
                     },
                     child: Row(
