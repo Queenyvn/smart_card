@@ -204,18 +204,20 @@ class _LoginPageState extends State<LoginPage> {
                     ),
               const SizedBox(height: 20),
 
-              // OR Divider
+              // OR Divider //
               Row(
                 children: const [
-                  Expanded(child: Divider(thickness: 1)),
+                  Flexible(child: Divider(thickness: 1)),
                   Padding(
                     padding: EdgeInsets.symmetric(horizontal: 8),
                     child: Text("OR SIGN IN WITH"),
                   ),
-                  Expanded(child: Divider(thickness: 1)),
+                  Flexible(child: Divider(thickness: 1)),
                 ],
               ),
+              // END OF OR DIVIDER //
               const SizedBox(height: 20),
+            
 
               // google sign in button
               Column(
