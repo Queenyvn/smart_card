@@ -205,15 +205,18 @@ class _LoginPageState extends State<LoginPage> {
               const SizedBox(height: 20),
 
               // OR Divider //
-              Row(
-                children: const [
-                  Flexible(child: Divider(thickness: 1)),
-                  Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 8),
-                    child: Text("OR SIGN IN WITH"),
-                  ),
-                  Flexible(child: Divider(thickness: 1)),
-                ],
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: 10),
+                child: Row(
+                  children: const [
+                    Flexible(child: Divider(thickness: 1)),
+                    Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 8),
+                      child: Text("OR SIGN IN WITH"),
+                    ),
+                    Flexible(child: Divider(thickness: 1)),
+                  ],
+                ),
               ),
               // END OF OR DIVIDER //
               const SizedBox(height: 20),
