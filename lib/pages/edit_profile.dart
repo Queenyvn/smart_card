@@ -1,4 +1,9 @@
 import 'package:flutter/material.dart';
+import 'dart:io';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:image_picker/image_picker.dart';
 
 class EditProfilePage extends StatefulWidget {
   final bool fromRegister;
@@ -10,7 +15,7 @@ class EditProfilePage extends StatefulWidget {
 }
 
 class _EditProfilePageState extends State<EditProfilePage> {
-  // Form controllers
+  // Controllers
   final TextEditingController _firstNameController = TextEditingController();
   final TextEditingController _lastNameController = TextEditingController();
   final TextEditingController _streetController = TextEditingController();
@@ -26,9 +31,40 @@ class _EditProfilePageState extends State<EditProfilePage> {
   final TextEditingController _socialLink1Controller = TextEditingController();
   final TextEditingController _socialLink2Controller = TextEditingController();
 
+  File? _profileImage;
+  File? _dtiFile;
+  String? _profileImageUrl;
+  String? _dtiFileUrl;
+
+  final _auth = FirebaseAuth.instance;
+
+  // City-ZIP data
+  final Map<String, String> _cityZipMap = {
+    'Cavite City': '4100',
+    'Tanza': '4108',
+    'Imus': '4103',
+    'Dasmariñas': '4114',
+    'Tagaytay': '4120',
+  };
+
+  @override
+  void initState() {
+    super.initState();
+    _autoFillFromGoogleAccount();
+  }
+
+  void _autoFillFromGoogleAccount() {
+    final user = _auth.currentUser;
+    if (user != null) {
+      _emailController.text = user.email ?? '';
+      final nameParts = (user.displayName ?? '').split(' ');
+      if (nameParts.isNotEmpty) _firstNameController.text = nameParts.first;
+      if (nameParts.length > 1) _lastNameController.text = nameParts.sublist(1).join(' ');
+    }
+  }
+
   @override
   void dispose() {
-    // Dispose controllers
     _firstNameController.dispose();
     _lastNameController.dispose();
     _streetController.dispose();
@@ -76,8 +112,54 @@ class _EditProfilePageState extends State<EditProfilePage> {
             _buildSectionHeader("Personal Information"),
             _buildDoubleTextField("First Name", "Last Name", _firstNameController, _lastNameController),
             _buildSingleTextField("Street, House No.", _streetController),
-            _buildDoubleTextField("Barangay", "City", _barangayController, _cityController),
-            _buildDoubleTextField("Province", "Zip Code", _provinceController, _zipCodeController),
+
+            // Barangay and City dropdown with ZIP auto-fill
+            Row(
+              children: [
+                Expanded(child: _buildSingleTextField("Barangay", _barangayController)),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    value: _cityController.text.isNotEmpty ? _cityController.text : null,
+                    decoration: InputDecoration(
+                      labelText: "City / Municipality",
+                      filled: true,
+                      fillColor: Colors.white,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    items: _cityZipMap.keys
+                        .map((city) => DropdownMenuItem(value: city, child: Text(city)))
+                        .toList(),
+                    onChanged: (selectedCity) {
+                      setState(() {
+                        _cityController.text = selectedCity!;
+                        _zipCodeController.text = _cityZipMap[selectedCity] ?? '';
+                      });
+                    },
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+
+            Row(
+              children: [
+                Expanded(child: _buildSingleTextField("Province", _provinceController)),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: TextField(
+                    controller: _zipCodeController,
+                    readOnly: true,
+                    decoration: InputDecoration(
+                      labelText: "Zip Code",
+                      filled: true,
+                      fillColor: Colors.white,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                ),
+              ],
+            ),
 
             _buildSectionHeader("Professional Information"),
             _buildSingleTextField("Title/Position", _titleController),
@@ -89,6 +171,9 @@ class _EditProfilePageState extends State<EditProfilePage> {
 
             _buildSectionHeader("Social Links"),
             _buildDoubleTextField("Social Link 1", "Social Link 2", _socialLink1Controller, _socialLink2Controller),
+
+            const SizedBox(height: 16),
+            _buildDTIUploader(),
 
             const SizedBox(height: 24),
             ElevatedButton.icon(
@@ -115,7 +200,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
     );
   }
 
-  // === Reusable UI Widgets ===
+  // === REUSABLE UI ===
 
   Widget _buildProfilePictureSection() {
     return Column(
@@ -123,9 +208,11 @@ class _EditProfilePageState extends State<EditProfilePage> {
         Stack(
           alignment: Alignment.bottomRight,
           children: [
-            const CircleAvatar(
+            CircleAvatar(
               radius: 55,
-              backgroundImage: NetworkImage("https://i.pravatar.cc/300"), // placeholder
+              backgroundImage: _profileImage != null
+                  ? FileImage(_profileImage!)
+                  : const NetworkImage("https://i.pravatar.cc/300") as ImageProvider,
             ),
             Container(
               decoration: BoxDecoration(
@@ -192,8 +279,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
     );
   }
 
-  Widget _buildDoubleTextField(
-      String label1, String label2, TextEditingController controller1, TextEditingController controller2) {
+  Widget _buildDoubleTextField(String label1, String label2, TextEditingController controller1, TextEditingController controller2) {
     return Row(
       children: [
         Expanded(child: _buildSingleTextField(label1, controller1)),
@@ -203,48 +289,56 @@ class _EditProfilePageState extends State<EditProfilePage> {
     );
   }
 
-  // === Actions ===
-  void _changeProfilePicture() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Change Profile Picture'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.camera_alt, color: Colors.red),
-              title: const Text('Take Photo'),
-              onTap: () {
-                Navigator.pop(context);
-                // TODO: Implement camera picker
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.photo_library, color: Colors.red),
-              title: const Text('Choose from Gallery'),
-              onTap: () {
-                Navigator.pop(context);
-                // TODO: Implement gallery picker
-              },
-            ),
-          ],
+  Widget _buildDTIUploader() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionHeader("DTI Registration"),
+        OutlinedButton.icon(
+          icon: const Icon(Icons.upload_file, color: Colors.red),
+          label: const Text("Upload DTI PDF", style: TextStyle(color: Colors.red)),
+          onPressed: _uploadDTIFile,
         ),
-      ),
+        if (_dtiFile != null)
+          Text("Selected file: ${_dtiFile!.path.split('/').last}", style: const TextStyle(fontSize: 12)),
+      ],
     );
+  }
+
+  // === ACTIONS ===
+
+  Future<void> _changeProfilePicture() async {
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(source: ImageSource.gallery);
+    if (picked != null) {
+      setState(() => _profileImage = File(picked.path));
+      final ref = FirebaseStorage.instance.ref().child('profile_pictures/${_auth.currentUser!.uid}.jpg');
+      await ref.putFile(_profileImage!);
+      _profileImageUrl = await ref.getDownloadURL();
+    }
+  }
+
+  Future<void> _uploadDTIFile() async {
+    final result = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['pdf']);
+    if (result != null && result.files.single.path != null) {
+      setState(() => _dtiFile = File(result.files.single.path!));
+      final ref = FirebaseStorage.instance.ref().child('dti_files/${_auth.currentUser!.uid}.pdf');
+      await ref.putFile(_dtiFile!);
+      _dtiFileUrl = await ref.getDownloadURL();
+    }
   }
 
   void _saveProfile() {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(widget.fromRegister
-            ? 'Profile submitted successfully!'
+            ? 'Profile submitted! Admin will review your account.'
             : 'Profile saved successfully!'),
       ),
     );
 
     if (widget.fromRegister) {
-      Navigator.pushReplacementNamed(context, '/home');
+      Navigator.pushReplacementNamed(context, '/pendingApproval');
     } else {
       Navigator.pop(context);
     }

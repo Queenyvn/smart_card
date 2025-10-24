@@ -1,26 +1,43 @@
 {
   "project_info": {
-    "project_number": "106105989505",
-    "project_id": "smartcard-8ebea",
-    "storage_bucket": "smartcard-8ebea.firebasestorage.app"
+    "project_number": "731351689459",
+    "project_id": "smartcard-475413",
+    "storage_bucket": "smartcard-475413.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:106105989505:android:3eedc32ae11c404b632080",
+        "mobilesdk_app_id": "1:731351689459:android:8bf928dc44741f14092f86",
         "android_client_info": {
           "package_name": "com.example.smart_card"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "731351689459-nrebmkfpe8nuuj7lbhdpb6ertlbk3cil.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
-          "current_key": "AIzaSyCTATbljw-gXYVMOQR24JWZlXVfFZ-fy6c"
+          "current_key": "AIzaSyC3HKHU8d_6ushUuIsKOl_xsGoW_JMdDuQ"
         }
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "731351689459-nrebmkfpe8nuuj7lbhdpb6ertlbk3cil.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "731351689459-90enhp2m9m3kkk88ivul6pj5aqpji08k.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.smartCard"
+              }
+            }
+          ]
         }
       }
     }
