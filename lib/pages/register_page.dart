@@ -299,8 +299,7 @@
                     ),
               const SizedBox(height: 20),
 
-              //Google Sign In Button
-              OutlinedButton(
+              //Google Sign In ButtonOutlinedButton(
                 style: OutlinedButton.styleFrom(
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(30),
@@ -308,7 +307,8 @@
                   side: const BorderSide(color: Colors.grey),
                   padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
                   backgroundColor: Colors.white,
-                  minimumSize: const Size(double.infinity, 50),
+                  minimumSize: const Size(double.in
+              finity, 50),
                 ),
                 onPressed: () async {
                   final googleProvider = GoogleSignInProvider();

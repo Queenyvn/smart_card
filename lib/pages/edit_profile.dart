@@ -113,33 +113,69 @@ class _EditProfilePageState extends State<EditProfilePage> {
             _buildDoubleTextField("First Name", "Last Name", _firstNameController, _lastNameController),
             _buildSingleTextField("Street, House No.", _streetController),
 
-            // Barangay and City dropdown with ZIP auto-fill
+            // Metro Manila (NCR) Checkbox
             Row(
               children: [
-                Expanded(child: _buildSingleTextField("Barangay", _barangayController)),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: DropdownButtonFormField<String>(
-                    value: _cityController.text.isNotEmpty ? _cityController.text : null,
-                    decoration: InputDecoration(
-                      labelText: "City / Municipality",
-                      filled: true,
-                      fillColor: Colors.white,
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                    items: _cityZipMap.keys
-                        .map((city) => DropdownMenuItem(value: city, child: Text(city)))
-                        .toList(),
-                    onChanged: (selectedCity) {
-                      setState(() {
-                        _cityController.text = selectedCity!;
-                        _zipCodeController.text = _cityZipMap[selectedCity] ?? '';
-                      });
-                    },
-                  ),
+                Checkbox(
+                  value: _isMetroManila,
+                  activeColor: Colors.red,
+                  onChanged: (value) {
+                    setState(() {
+                      _isMetroManila = value ?? false;
+                      if (_isMetroManila) {
+                        _provinceController.text = "Metro Manila (NCR)";
+                      } else {
+                        _provinceController.clear();
+                        _zipCodeController.clear();
+                        selectedNcrCity = null;
+                        selectedBarangay = null;
+                      }
+                    });
+                  },
+                ),
+                const Text(
+                  "Metro Manila (NCR)",
+                  style: TextStyle(fontWeight: FontWeight.w600),
                 ),
               ],
             ),
+
+            // City & Barangay dropdowns if NCR is checked
+            if (_isMetroManila) ...[
+              const SizedBox(height: 8),
+              DropdownButtonFormField<String>(
+                value: selectedNcrCity,
+                decoration: _inputDecoration("City/Municipality"),
+                items: _ncrCityZipMap.keys.map((city) {
+                  return DropdownMenuItem(value: city, child: Text(city));
+                }).toList(),
+                onChanged: (city) {
+                  setState(() {
+                    selectedNcrCity = city;
+                    _cityController.text = city ?? '';
+                    _zipCodeController.text = _ncrCityZipMap[city] ?? '';
+                  });
+                },
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                value: selectedBarangay,
+                decoration: _inputDecoration("Barangay"),
+                items: [
+                  'Barangay 1', 'Barangay 2', 'Barangay 3', 'Barangay 4', 'Barangay 5'
+                ].map((b) => DropdownMenuItem(value: b, child: Text(b))).toList(),
+                onChanged: (b) {
+                  setState(() {
+                    selectedBarangay = b;
+                    _barangayController.text = b ?? '';
+                  });
+                },
+              ),
+            ] else ...[
+              // Non-NCR users
+              _buildDoubleTextField("Barangay", "City", _barangayController, _cityController),
+              _buildDoubleTextField("Province", "Zip Code", _provinceController, _zipCodeController),
+            ],
             const SizedBox(height: 12),
 
             Row(
