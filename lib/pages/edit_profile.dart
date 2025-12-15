@@ -47,6 +47,80 @@ class _EditProfilePageState extends State<EditProfilePage> {
     'Tagaytay': '4120',
   };
 
+    // Metro Manila toggle
+  bool _isMetroManila = false;
+
+  // NCR City dropdown
+  String? selectedNcrCity;
+
+  // Barangay dropdown
+  String? selectedBarangay;
+
+  // NCR cities with zip codes
+  final Map<String, String> _ncrCityZipMap = {
+    "Binondo": "1006",
+    "Intramuros": "1002",
+    "Malate": "1004",
+    "Manila": "1000",
+    "Paco": "1007",
+    "Pandacan": "1008",
+    "Port Area": "1018",
+    "Quiapo": "1001",
+    "Sampaloc East": "1008",
+    "Sampaloc West": "1015",
+    "San Andres Bukid": "1017",
+    "San Miguel": "1005",
+    "San Nicolas": "1010",
+    "Santa Ana": "1009",
+    "Santa Cruz North": "1014",
+    "Santa Cruz South": "1003",
+    "Santa Mesa": "1016",
+    "Tondo North": "1013",
+    "Tondo South": "1012",
+    "Amparo Subdivision": "1425",
+    "Bagong Silang": "1428",
+    "Bagumbong/Pag-asa": "1421",
+    "Bankers Village": "1426",
+    "Capitol Parkland Subdivision": "1424",
+    "Kaybiga/Deparo": "1420",
+    "Lilles Ville Subdivision": "1420",
+    "Novaliches North": "1422",
+    "Tala Leprosarium": "1427",
+    "Victory Heights": "1423",
+    "1st Avenue to 7th Avenue-West": "1405",
+    "Baesa": "1401",
+    "Fish Market": "1411",
+
+  };
+
+  // Barangays per city
+  final Map<String, List<String>> _barangaysByCity = {
+    "Manila": ["Tondo", "Ermita", "Intramuros"],
+    "Makati": ["Bel-Air", "Poblacion", "San Lorenzo"],
+    "Quezon City": ["Batasan Hills", "Commonwealth", "Bagong Silangan"],
+    "Pasig": ["Bagong Ilog", "Manggahan", "Ugong"],
+    "Taguig": ["Bagumbayan", "Ususan", "Napindan"],
+  };
+
+  // Cleaner input decoration
+  InputDecoration _inputDecoration(String label) {
+    return InputDecoration(
+      labelText: label,
+      filled: true,
+      fillColor: Colors.white,
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Colors.grey),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Colors.red, width: 2),
+      ),
+    );
+  }
+
+
   @override
   void initState() {
     super.initState();

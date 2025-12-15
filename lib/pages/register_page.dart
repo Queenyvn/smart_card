@@ -282,7 +282,7 @@
                         }
                       },
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFD32F2F), // CBOC Red
+                        backgroundColor: const Color(0xFFD32F2F), 
                         minimumSize: const Size(double.infinity, 50),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
@@ -299,7 +299,8 @@
                     ),
               const SizedBox(height: 20),
 
-              //Google Sign In ButtonOutlinedButton(
+              //Google Sign In ButtonOutlinedButton
+              OutlinedButton(
                 style: OutlinedButton.styleFrom(
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(30),
@@ -307,8 +308,7 @@
                   side: const BorderSide(color: Colors.grey),
                   padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
                   backgroundColor: Colors.white,
-                  minimumSize: const Size(double.in
-              finity, 50),
+                  minimumSize: const Size(double.infinity, 50),
                 ),
                 onPressed: () async {
                   final googleProvider = GoogleSignInProvider();
@@ -336,7 +336,7 @@
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Image.asset(
-                      'assets/google_logo.png', // <-- add your Google "G" logo here
+                      'assets/google_logo.png', //
                       height: 24,
                     ),
                     const SizedBox(width: 12),
