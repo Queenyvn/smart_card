@@ -90,6 +90,10 @@ class _EditProfilePageState extends State<EditProfilePage> {
     "1st Avenue to 7th Avenue-West": "1405",
     "Baesa": "1401",
     "Fish Market": "1411",
+    "Grace Park East": "1403",
+    "Grace Park West": "1406",
+    "Isla de Cocomo":	"1412",
+
 
   };
 
@@ -162,8 +166,9 @@ class _EditProfilePageState extends State<EditProfilePage> {
       backgroundColor: Colors.grey[100],
       appBar: AppBar(
         title: Text(widget.fromRegister ? "Complete Profile" : "Edit Profile"),
-        backgroundColor: Colors.red,
-        elevation: 0,
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.black,
+        elevation: 1,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.pop(context),

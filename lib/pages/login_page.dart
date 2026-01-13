@@ -26,66 +26,29 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Future<void> _loginUser() async {
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
+  setState(() {
+    _isLoading = true;
+    _errorMessage = null;
+  });
 
-    final username = _usernameController.text.trim();
-    final password = _passwordController.text.trim();
+  final username = _usernameController.text.trim();
+  final password = _passwordController.text.trim();
 
-    if (username.isEmpty || password.isEmpty) {
-      setState(() {
-        _errorMessage = "Please enter your username and password.";
-        _isLoading = false;
-      });
-      return;
-    }
+  // dev bypass credential
+  if (username == 'dev' && password == 'dev') {
+    await Future.delayed(const Duration(milliseconds: 500));
 
-    try {
-      // Look up the email for the given username
-      final querySnapshot = await FirebaseFirestore.instance
-          .collection('usernames')
-          .where('username', isEqualTo: username)
-          .limit(1)
-          .get();
-
-      if (querySnapshot.docs.isEmpty) {
-        setState(() {
-          _errorMessage = "No user found with this username.";
-        });
-        return;
-      }
-
-      final email = querySnapshot.docs.first['email'] as String;
-
-      // Sign in with email/password
-      await FirebaseAuth.instance.signInWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
-
-      Navigator.pushReplacementNamed(context, '/home');
-    } on FirebaseAuthException catch (e) {
-      setState(() {
-        if (e.code == 'wrong-password') {
-          _errorMessage = "Incorrect password.";
-        } else if (e.code == 'user-not-found') {
-          _errorMessage = "No user found with this username.";
-        } else {
-          _errorMessage = "Login failed: ${e.message}";
-        }
-      });
-    } catch (e) {
-      setState(() {
-        _errorMessage = "An error occurred. Please try again.";
-      });
-    } finally {
-      setState(() {
-        _isLoading = false;
-      });
-    }
+    Navigator.pushReplacementNamed(context, '/home');
+    return;
   }
+
+  // block everything else during dev
+  setState(() {
+    _errorMessage = 'DEV MODE: use username "dev" and password "dev".';
+    _isLoading = false;
+  });
+}
+
 
   @override
   Widget build(BuildContext context) {

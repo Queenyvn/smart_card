@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'edit_profile.dart'; // ✅ points to your full form
+import 'edit_profile.dart';
 
 class UserProfilePage extends StatefulWidget {
   const UserProfilePage({super.key});
@@ -17,7 +17,9 @@ class _UserProfilePageState extends State<UserProfilePage> {
       appBar: AppBar(
         title: const Text("User Profile"),
         centerTitle: true,
-        backgroundColor: Colors.red,
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.black,
+        elevation: 1,
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),

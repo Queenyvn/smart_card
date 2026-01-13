@@ -1,6 +1,13 @@
 import 'package:flutter/material.dart';
-import 'user_profile.dart'; // <-- import profile page
+import 'user_profile.dart';
 import 'menu_page.dart';
+import 'calendar.dart';
+import 'messages_page.dart';  
+import 'settings_page.dart';
+import 'e_portfolio_page.dart';
+import 'qr_code_page.dart';
+import 'analytics_page.dart';
+import 'scanner_page.dart'; 
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -17,15 +24,39 @@ class _HomePageState extends State<HomePage> {
   void _onItemTapped(int index) {
     setState(() => _selectedIndex = index);
 
-    if (index == 1) {
-      // Navigate to Profile
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (context) => const UserProfilePage()),
-      );
+    switch (index) {
+      case 0:
+        // Home (already here)
+        break;
+      case 1:
+        // Navigate to Calendar
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const CalendarPage()),
+        );
+        break;
+      case 2:
+        // Navigate to Scan
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const ScannerPage()),
+        );
+        break;
+      case 3:
+        // Navigate to Chat
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const MessagesPage()),
+        );
+        break;
+      case 4:
+        // Navigate to Settings
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const SettingsPage()),
+        );
+        break;
     }
-    // index 0 = Home (already here)
-    // index 2 = placeholder for Settings/Other
   }
 
   @override
@@ -57,7 +88,7 @@ class _HomePageState extends State<HomePage> {
                           const Text("Mary Jane Araco",
                               style: TextStyle(
                                   fontSize: 14, fontWeight: FontWeight.w500)),
-                          // 🔽 View Profile button with hover effect
+                          // View Profile button with hover effect
                           MouseRegion(
                             onEnter: (_) =>
                                 setState(() => _isHovering = true),
@@ -93,7 +124,7 @@ class _HomePageState extends State<HomePage> {
               ),
               const SizedBox(height: 20),
 
-              /// 🔍 SEARCH BAR
+              ///  SEARCH BAR
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 decoration: BoxDecoration(
@@ -117,31 +148,18 @@ class _HomePageState extends State<HomePage> {
                   const Text("Dashboard",
                       style:
                           TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-// from other source text button                          
-//                  TextButton(
-//                    onPressed: () {},
-//                    child: Row(
-//                      children: const [
-//                        Text("Show All", style: TextStyle(color: Colors.red)),
-//                        Icon(Icons.arrow_forward_ios,
-//                            color: Colors.red, size: 16),
-//                      ],
-//                    ),
-//                  )
-// START TO COMMENT HERE FOR BUTTON FROM FLUTTER TEMPLATES
                   TextButton(
                     style: ButtonStyle(
-                      overlayColor: MaterialStateProperty.all(Colors.transparent), // no splash
+                      overlayColor: MaterialStateProperty.all(Colors.transparent),
                       foregroundColor: MaterialStateProperty.resolveWith<Color>(
                         (Set<MaterialState> states) {
                           if (states.contains(MaterialState.hovered)) {
-                            return Colors.red; // hover color
-                            }
-                            return Colors.grey; // default color
+                            return Colors.red;
+                          }
+                          return Colors.grey;
                         },
                       ),
                     ),
-                    // PUSH TO MENU PAGE 
                     onPressed: () {
                       Navigator.push(
                         context,
@@ -153,16 +171,30 @@ class _HomePageState extends State<HomePage> {
                       style: TextStyle(fontWeight: FontWeight.w600),
                     ),
                   )
-//      verticalSpacer,
                 ],
               ),
               const SizedBox(height: 12),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
-                  _dashboardCard(Icons.description, "E-Portfolio"),
-                  _dashboardCard(Icons.qr_code_scanner, "QR Code"),
-                  _dashboardCard(Icons.bar_chart, "Analytics"),
+                  _dashboardCard(Icons.description, "E-Portfolio", () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const EPortfolioPage()),
+                    );
+                  }),
+                  _dashboardCard(Icons.qr_code_scanner, "QR Code", () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const QRCodePage()),
+                    );
+                  }),
+                  _dashboardCard(Icons.bar_chart, "Analytics", () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const AnalyticsPage()),
+                    );
+                  }),
                 ],
               ),
               const SizedBox(height: 24),
@@ -171,20 +203,15 @@ class _HomePageState extends State<HomePage> {
               const Text("Recently Interacted With...",
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               const SizedBox(height: 12),
-              _contactCard("Juan Dela Cruz", "Business Owner",
-                  "assets/profile.jpg"),
-              _contactCard("Ana Santos", "Marketing Specialist",
-                  "assets/profile.jpg"),
-              _contactCard("Carlos Reyes", "Tech Entrepreneur",
-                  "assets/profile.jpg"),
+              _recentlyInteractedCarousel(context),
             ],
           ),
         ),
       ),
 
-      /// 🔽 Bottom Navigation Bar (only in HomePage)
+      ///  Bottom Navigation Bar (only in HomePage)
       bottomNavigationBar: BottomNavigationBar(
-        type: BottomNavigationBarType.fixed, // <-- keeps icons aligned
+        type: BottomNavigationBarType.fixed,
         currentIndex: _selectedIndex,
         onTap: _onItemTapped,
         backgroundColor: Colors.white,
@@ -201,42 +228,44 @@ class _HomePageState extends State<HomePage> {
             label: "Calendar",
           ),
           BottomNavigationBarItem(
-              icon: Icon(Icons.qr_code_scanner),
-              label: "Scan",
+            icon: Icon(Icons.qr_code_scanner),
+            label: "Scan",
           ),
           BottomNavigationBarItem(
-              icon: Icon(Icons.chat_bubble_outline),
-              label: "Chat",
+            icon: Icon(Icons.chat_bubble_outline),
+            label: "Chat",
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.settings),
             label: "Settings",
-            ),
+          ),
         ],
       ),
-
     );
   }
 
   /// Dashboard card widget
-  Widget _dashboardCard(IconData icon, String title) {
-    return Container(
-      width: 100,
-      height: 100,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.red.shade50,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(icon, size: 32, color: Colors.red),
-          const SizedBox(height: 8),
-          Text(title,
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 12)),
-        ],
+  Widget _dashboardCard(IconData icon, String title, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 100,
+        height: 100,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.red.shade50,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 32, color: Colors.red),
+            const SizedBox(height: 8),
+            Text(title,
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 12)),
+          ],
+        ),
       ),
     );
   }
@@ -268,5 +297,110 @@ class _HomePageState extends State<HomePage> {
       ),
     );
   }
-}
 
+  /// Recently Interacted Carousel
+  Widget _recentlyInteractedCarousel(BuildContext context) {
+    final PageController controller = PageController(viewportFraction: 0.85);
+
+    final List<Map<String, String>> people = [
+      {
+        'name': 'Arjon Fulgencio',
+        'role': 'Business Owner',
+        'img': 'assets/profile.jpg',
+      },
+      {
+        'name': 'Athala Odiver',
+        'role': 'Marketing Specialist',
+        'img': 'assets/profile.jpg',
+      },
+      {
+        'name': 'Khyla Diaz',
+        'role': 'Tech Entrepreneur',
+        'img': 'assets/profile.jpg',
+      },
+    ];
+
+    return SizedBox(
+      height: 240,
+      child: PageView.builder(
+        controller: controller,
+        itemCount: people.length,
+        itemBuilder: (context, index) {
+          final person = people[index];
+
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            child: Card(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              elevation: 3,
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 26,
+                          backgroundImage: AssetImage(person['img']!),
+                        ),
+                        const SizedBox(width: 12),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              person['name']!,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 15,
+                              ),
+                            ),
+                            Text(
+                              person['role']!,
+                              style: const TextStyle(color: Colors.grey),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+
+                    const Spacer(),
+
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const UserProfilePage(),
+                            ),
+                          );
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        child: const Text(
+                          "View Profile",
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}

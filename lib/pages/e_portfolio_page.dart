@@ -1,22 +1,24 @@
 import 'package:flutter/material.dart';
+import 'user_profile.dart';
 
 class EPortfolioPage extends StatelessWidget {
   const EPortfolioPage({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFFAFAFA),
-      appBar: AppBar(
-        title: const Text("E Portfolio"),
-        backgroundColor: Colors.red,
-      ),
-      body: const Center(
-        child: Text(
-          "E Portfolio will appear here",
-          style: TextStyle(fontSize: 16, color: Colors.black54),
+    // redirects to profile page //
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => const UserProfilePage(),
         ),
-      ),
+      );
+    });
+
+    // Keep an empty scaffold while navigation occurs
+    return const Scaffold(
+      backgroundColor: Color(0xFFFAFAFA),
     );
   }
 }

@@ -86,7 +86,7 @@
           password: password,
         );
 
-        // Save username → email mapping in Firestore
+        // Save username to email mapping in Firestore
         await FirebaseFirestore.instance.collection('usernames').add({
           'username': username,
           'email': email,
