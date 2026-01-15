@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../providers/google_sign_in_provider.dart';
+import 'package:flutter/foundation.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -35,11 +36,18 @@ class _LoginPageState extends State<LoginPage> {
   final password = _passwordController.text.trim();
 
   // dev bypass credential
-  if (username == 'dev' && password == 'dev') {
-    await Future.delayed(const Duration(milliseconds: 500));
-
-    Navigator.pushReplacementNamed(context, '/home');
-    return;
+  if (kDebugMode) {
+    if (username == 'dev' && password == 'dev') {
+      await Future.delayed(const Duration(milliseconds: 500));
+      Navigator.pushReplacementNamed(context, '/home');
+      return;
+    }
+    // block everything else during dev
+    setState(() {
+      _errorMessage = 'DEV MODE: use "dev" for both username and password.';
+      _isLoading = false;
+    });
+    return
   }
 
   // block everything else during dev
