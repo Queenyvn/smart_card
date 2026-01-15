@@ -48,7 +48,7 @@ class AppInitializer extends StatelessWidget {
         }
 
         if (snapshot.connectionState == ConnectionState.done) {
-          return const SmartCallingCardApp(); // Your existing app
+          return const SmartCallingCardApp(); 
         }
 
         return const MaterialApp(

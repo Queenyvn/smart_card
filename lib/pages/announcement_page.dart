@@ -151,7 +151,7 @@ class _EventCard extends StatelessWidget {
                 bottomLeft: Radius.circular(14),
               ),
               image: DecorationImage(
-                image: AssetImage("assets/event.jpg"),
+                image: AssetImage("assets/events.jpg"),
                 fit: BoxFit.cover,
               ),
             ),
