@@ -42,19 +42,15 @@ class _LoginPageState extends State<LoginPage> {
       Navigator.pushReplacementNamed(context, '/home');
       return;
     }
+  
+
     // block everything else during dev
     setState(() {
-      _errorMessage = 'DEV MODE: use "dev" for both username and password.';
+      _errorMessage = 'DEV MODE: use username "dev" and password "dev".';
       _isLoading = false;
     });
     return;
-  }
-
-  // block everything else during dev
-  setState(() {
-    _errorMessage = 'DEV MODE: use username "dev" and password "dev".';
-    _isLoading = false;
-  });
+  }  
 }
 
 
