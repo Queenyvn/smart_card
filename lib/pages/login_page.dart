@@ -47,7 +47,7 @@ class _LoginPageState extends State<LoginPage> {
       _errorMessage = 'DEV MODE: use "dev" for both username and password.';
       _isLoading = false;
     });
-    return
+    return;
   }
 
   // block everything else during dev
