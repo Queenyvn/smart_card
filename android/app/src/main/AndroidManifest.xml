@@ -1,4 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- for camera access (permission) -->
+    <uses-permission android:name="android.permission.CAMERA"/>
+
     <application
         android:label="smart_card"
         android:name="${applicationName}"

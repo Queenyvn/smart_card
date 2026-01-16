@@ -21,7 +21,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
         foregroundColor: Colors.black,
         elevation: 1,
       ),
-      body: Padding(
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.center,
@@ -36,12 +36,34 @@ class _UserProfilePageState extends State<UserProfilePage> {
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             const Text(
-              "Business Owner",
-              style: TextStyle(fontSize: 16, color: Colors.grey),
+              "Perfume Business Owner",
+              style: TextStyle(
+                fontSize: 16,
+                color: Colors.grey,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              "Perfume de Acre",
+              style: TextStyle(
+                fontSize: 18,
+                color: Colors.black87,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              "A perfume company focused on designing distinctive, long-lasting fragrances that allow users to express their identity through scent.",
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey,
+              ),
             ),
             const SizedBox(height: 20),
 
-            // 🔽 Edit Profile button with hover effect
+            // Edit Profile button with hover effect
             MouseRegion(
               onEnter: (_) => setState(() => _isHovering = true),
               onExit: (_) => setState(() => _isHovering = false),
@@ -50,7 +72,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (context) => const EditProfilePage(), // ✅ now loads real one
+                      builder: (context) => const EditProfilePage(),
                     ),
                   );
                 },
@@ -67,7 +89,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
 
             const SizedBox(height: 30),
 
-            /// Example extra details
+            /// Contact & Address
             ListTile(
               leading: const Icon(Icons.email, color: Colors.red),
               title: const Text("maryjane@email.com"),
@@ -78,7 +100,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
             ),
             ListTile(
               leading: const Icon(Icons.location_on, color: Colors.red),
-              title: const Text("Tagaytay, Cavite, Philippines"),
+              title: const Text("Block 3 Lot 5, Tejeros Convention, Rosario, Cavite, 4106"),
             ),
           ],
         ),

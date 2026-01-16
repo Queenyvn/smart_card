@@ -13,12 +13,76 @@ class HomePage extends StatefulWidget {
   const HomePage({super.key});
 
   @override
-  State<HomePage> createState() => _HomePageState();
+  State<HomePage> createState() => _HomePageState();  
 }
 
 class _HomePageState extends State<HomePage> {
   bool _isHovering = false;
   int _selectedIndex = 0;
+  
+  /// Mutuals List below the recently interacted carousel
+Widget _mutualsList() {
+  final List<Map<String, String>> mutuals = [
+    {
+      'name': 'Dr. Olivia Wilson',
+      'title': 'Consultant - Physiotherapy',
+      'img': 'assets/profile.jpg',
+    },
+    {
+      'name': 'Jonathan Patterson',
+      'title': 'Consultant - Internal Medicine',
+      'img': 'assets/profile.jpg',
+    },
+    {
+      'name': 'Athala Odiver',
+      'title': 'Marketing Specialist',
+      'img': 'assets/profile.jpg',
+    },
+  ];
+
+  return Column(
+    children: mutuals.map((person) {
+      return Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.grey.shade100,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            CircleAvatar(
+              radius: 26,
+              backgroundImage: AssetImage(person['img']!),
+            ),
+            const SizedBox(width: 12),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  person['name']!,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  person['title']!,
+                  style: const TextStyle(
+                    color: Colors.grey,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+    }).toList(),
+  );
+}
+
 
   // Handle navigation when tapping bottom nav items
   void _onItemTapped(int index) {
@@ -204,6 +268,13 @@ class _HomePageState extends State<HomePage> {
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               const SizedBox(height: 12),
               _recentlyInteractedCarousel(context),
+
+              const SizedBox(height: 24),
+              const Text("Mutuals",
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 12),
+
+                  _mutualsList(),
             ],
           ),
         ),
