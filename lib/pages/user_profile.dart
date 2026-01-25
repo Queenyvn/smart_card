@@ -9,17 +9,86 @@ class UserProfilePage extends StatefulWidget {
 }
 
 class _UserProfilePageState extends State<UserProfilePage> {
-  bool _isHovering = false;
+  bool isEditing = false;
+
+  final nameController =
+      TextEditingController(text: "Mary Jane Araco");
+  final roleController =
+      TextEditingController(text: "Perfume Business Owner");
+  final businessNameController =
+      TextEditingController(text: "Perfume de Acre");
+  final businessDescController = TextEditingController(
+    text:
+        "A perfume company focused on designing distinctive, long-lasting fragrances that allow users to express their identity through scent.",
+  );
+  final emailController =
+      TextEditingController(text: "maryjane@email.com");
+  final phoneController =
+      TextEditingController(text: "+63 912 345 6789");
+  final addressController = TextEditingController(
+    text:
+        "Block 3 Lot 5, Tejeros Convention, Rosario, Cavite, 4106",
+  );
+
+  @override
+  void dispose() {
+    nameController.dispose();
+    roleController.dispose();
+    businessNameController.dispose();
+    businessDescController.dispose();
+    emailController.dispose();
+    phoneController.dispose();
+    addressController.dispose();
+    super.dispose();
+  }
+
+  Widget buildTextOrField({
+    required TextEditingController controller,
+    required TextStyle style,
+    int maxLines = 1,
+    TextAlign align = TextAlign.center,
+  }) {
+    return isEditing
+        ? TextField(
+            controller: controller,
+            maxLines: maxLines,
+            textAlign: align,
+            decoration: const InputDecoration(
+              border: OutlineInputBorder(),
+              isDense: true,
+            ),
+          )
+        : Text(
+            controller.text,
+            textAlign: align,
+            style: style,
+          );
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("User Profile"),
+        title: const Text("Profile"),
         centerTitle: true,
         backgroundColor: Colors.white,
         foregroundColor: Colors.black,
         elevation: 1,
+        actions: [
+          IconButton(
+            icon: Icon(isEditing ? Icons.save : Icons.edit),
+            onPressed: () {
+              setState(() {
+                isEditing = !isEditing;
+              });
+
+              if (!isEditing) {
+                // 🔥 SAVE LOGIC HERE (Firebase / API / Local storage)
+                debugPrint("Profile saved");
+              }
+            },
+          ),
+        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
@@ -31,59 +100,45 @@ class _UserProfilePageState extends State<UserProfilePage> {
               backgroundImage: AssetImage("assets/profile.jpg"),
             ),
             const SizedBox(height: 12),
-            const Text(
-              "Mary Jane Araco",
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+
+            buildTextOrField(
+              controller: nameController,
+              style: const TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
             ),
-            const Text(
-              "Perfume Business Owner",
-              style: TextStyle(
-                fontSize: 16,
+
+            const SizedBox(height: 6),
+
+            buildTextOrField(
+              controller: roleController,
+              style: const TextStyle(
+                fontSize: 18,
                 color: Colors.grey,
                 fontWeight: FontWeight.w500,
               ),
             ),
+
             const SizedBox(height: 4),
-            const Text(
-              "Perfume de Acre",
-              style: TextStyle(
-                fontSize: 18,
+
+            buildTextOrField(
+              controller: businessNameController,
+              style: const TextStyle(
+                fontSize: 16,
                 color: Colors.black87,
                 fontWeight: FontWeight.w500,
               ),
             ),
+
             const SizedBox(height: 8),
-            const Text(
-              "A perfume company focused on designing distinctive, long-lasting fragrances that allow users to express their identity through scent.",
-              textAlign: TextAlign.center,
-              style: TextStyle(
+
+            buildTextOrField(
+              controller: businessDescController,
+              maxLines: 3,
+              style: const TextStyle(
                 fontSize: 14,
                 color: Colors.grey,
-              ),
-            ),
-            const SizedBox(height: 20),
-
-            // Edit Profile button with hover effect
-            MouseRegion(
-              onEnter: (_) => setState(() => _isHovering = true),
-              onExit: (_) => setState(() => _isHovering = false),
-              child: GestureDetector(
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const EditProfilePage(),
-                    ),
-                  );
-                },
-                child: Text(
-                  "Edit Profile",
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: _isHovering ? Colors.red : Colors.grey,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
               ),
             ),
 
@@ -92,15 +147,38 @@ class _UserProfilePageState extends State<UserProfilePage> {
             /// Contact & Address
             ListTile(
               leading: const Icon(Icons.email, color: Colors.red),
-              title: const Text("maryjane@email.com"),
+              title: isEditing
+                  ? TextField(
+                      controller: emailController,
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                      ),
+                    )
+                  : Text(emailController.text),
             ),
             ListTile(
               leading: const Icon(Icons.phone, color: Colors.red),
-              title: const Text("+63 912 345 6789"),
+              title: isEditing
+                  ? TextField(
+                      controller: phoneController,
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                      ),
+                    )
+                  : Text(phoneController.text),
             ),
             ListTile(
-              leading: const Icon(Icons.location_on, color: Colors.red),
-              title: const Text("Block 3 Lot 5, Tejeros Convention, Rosario, Cavite, 4106"),
+              leading:
+                  const Icon(Icons.location_on, color: Colors.red),
+              title: isEditing
+                  ? TextField(
+                      controller: addressController,
+                      maxLines: 2,
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                      ),
+                    )
+                  : Text(addressController.text),
             ),
           ],
         ),
