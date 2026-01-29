@@ -23,7 +23,7 @@ class AnalyticsPage extends StatelessWidget {
             Row(
               children: [
                 _summaryCard(
-                  title: "Total Views",
+                  title: "Total Visits",
                   value: "129",
                   icon: Icons.remove_red_eye,
                 ),
