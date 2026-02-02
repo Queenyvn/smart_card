@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:file_picker/file_picker.dart';
@@ -12,6 +13,27 @@ class EditProfilePage extends StatefulWidget {
 
   @override
   State<EditProfilePage> createState() => _EditProfilePageState();
+}
+
+class BusinessForm {
+  String? id; // Firestore document ID
+
+  final TextEditingController name = TextEditingController();
+  final TextEditingController description = TextEditingController();
+  final TextEditingController role = TextEditingController();
+  final TextEditingController contact = TextEditingController();
+  final TextEditingController address = TextEditingController();
+
+  List<File> images = [];
+  List<String> imageUrls = []; // uploaded Firebase URLs
+
+  void dispose() {
+    name.dispose();
+    description.dispose();
+    role.dispose();
+    contact.dispose();
+    address.dispose();
+  }
 }
 
 class _EditProfilePageState extends State<EditProfilePage> {
@@ -30,6 +52,15 @@ class _EditProfilePageState extends State<EditProfilePage> {
   final TextEditingController _websiteController = TextEditingController();
   final TextEditingController _socialLink1Controller = TextEditingController();
   final TextEditingController _socialLink2Controller = TextEditingController();
+
+  final List<BusinessForm> _businesses = [];
+  final List<String> _deletedBusinessIds = [];
+
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
+  // DEV MODE: Bypass admin approval. Remove after thorough testing =====================================
+  static const bool _devBypassApproval = true;
+  // DEV MODE: Bypass admin approval. Remove after thorough testing =====================================
 
   File? _profileImage;
   File? _dtiFile;
@@ -129,6 +160,11 @@ class _EditProfilePageState extends State<EditProfilePage> {
   void initState() {
     super.initState();
     _autoFillFromGoogleAccount();
+    _loadUserProfile();
+
+    if (_businesses.isEmpty) {
+      _businesses.add(BusinessForm());
+    }
   }
 
   void _autoFillFromGoogleAccount() {
@@ -138,6 +174,57 @@ class _EditProfilePageState extends State<EditProfilePage> {
       final nameParts = (user.displayName ?? '').split(' ');
       if (nameParts.isNotEmpty) _firstNameController.text = nameParts.first;
       if (nameParts.length > 1) _lastNameController.text = nameParts.sublist(1).join(' ');
+    }
+  }
+
+  Future<void> _loadUserProfile() async {
+    final user = _auth.currentUser;
+    if (user == null) return;
+
+    try {
+      final doc = await _firestore.collection('users').doc(user.uid).get();
+      if (!doc.exists) return;
+
+      final data = doc.data()!;
+
+      setState(() {
+        // Personal info
+        _firstNameController.text = data['firstName'] ?? '';
+        _lastNameController.text = data['lastName'] ?? '';
+        _streetController.text = data['street'] ?? '';
+        _barangayController.text = data['barangay'] ?? '';
+        _cityController.text = data['city'] ?? '';
+        _provinceController.text = data['province'] ?? '';
+        _zipCodeController.text = data['zipCode'] ?? '';
+
+        // NCR logic
+        _isMetroManila = data['isMetroManila'] ?? false;
+
+        if (_isMetroManila) {
+          selectedNcrCity = data['city'];
+          selectedBarangay = data['barangay'];
+        }
+
+        // Professional
+        _titleController.text = data['title'] ?? '';
+        _bioController.text = data['bio'] ?? '';
+
+        // Contact
+        _phoneController.text = data['phoneNumber'] ?? '';
+        _emailController.text = data['email'] ?? '';
+        _websiteController.text = data['website'] ?? '';
+
+        // Social links
+        final socials = data['socialLinks'] as Map<String, dynamic>? ?? {};
+        _socialLink1Controller.text = socials['link1'] ?? '';
+        _socialLink2Controller.text = socials['link2'] ?? '';
+
+        // Files
+        _profileImageUrl = data['profileImageUrl'];
+        _dtiFileUrl = data['dtiFileUrl'];
+      });
+    } catch (e) {
+      debugPrint('Error loading profile: $e');
     }
   }
 
@@ -201,7 +288,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
                   onChanged: (value) {
                     setState(() {
                       _isMetroManila = value ?? false;
-                      if (_isMetroManila) {
+                      if (_isMetroManila && _provinceController.text.isEmpty) {
                         _provinceController.text = "Metro Manila (NCR)";
                       } else {
                         _provinceController.clear();
@@ -289,6 +376,8 @@ class _EditProfilePageState extends State<EditProfilePage> {
 
             const SizedBox(height: 16),
             _buildDTIUploader(),
+            _buildSectionHeader("List of Businesses"),
+            _buildBusinessesSection(),
 
             const SizedBox(height: 24),
             ElevatedButton.icon(
@@ -326,8 +415,11 @@ class _EditProfilePageState extends State<EditProfilePage> {
             CircleAvatar(
               radius: 55,
               backgroundImage: _profileImage != null
-                  ? FileImage(_profileImage!)
-                  : const NetworkImage("https://i.pravatar.cc/300") as ImageProvider,
+                ? FileImage(_profileImage!)
+                : (_profileImageUrl != null
+                    ? NetworkImage(_profileImageUrl!)
+                    : const NetworkImage("https://i.pravatar.cc/300"))
+                as ImageProvider,
             ),
             Container(
               decoration: BoxDecoration(
@@ -416,6 +508,150 @@ class _EditProfilePageState extends State<EditProfilePage> {
         ),
         if (_dtiFile != null)
           Text("Selected file: ${_dtiFile!.path.split('/').last}", style: const TextStyle(fontSize: 12)),
+        if (_dtiFileUrl != null && _dtiFile == null)
+          const Text(
+            "DTI file already uploaded",
+            style: TextStyle(fontSize: 12, color: Colors.green),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildBusinessesSection() {
+    return Column(
+      children: [
+        ..._businesses.asMap().entries.map((entry) {
+          final index = entry.key;
+          final business = entry.value;
+
+          return Card(
+            margin: const EdgeInsets.only(bottom: 16),
+            elevation: 2,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Header row
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        "Business ${index + 1}",
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.delete, color: Colors.red),
+                        onPressed: () {
+                          setState(() {
+                            if (business.id != null) {
+                              _deletedBusinessIds.add(business.id!);
+                            }
+                            business.dispose();
+                            _businesses.removeAt(index);
+                          });
+                        },
+                      ),
+                    ],
+                  ),
+
+                  _buildSingleTextField("Business Name", business.name),
+                  _buildSingleTextField(
+                    "Business Description",
+                    business.description,
+                    maxLines: 3,
+                  ),
+                  _buildSingleTextField("Business Role", business.role),
+                  _buildSingleTextField("Business Contact Info", business.contact),
+                  _buildSingleTextField("Business Address", business.address),
+
+                  const SizedBox(height: 8),
+                  _buildBusinessImages(business),
+                ],
+              ),
+            ),
+          );
+        }),
+
+        // Add business button
+        OutlinedButton.icon(
+          icon: const Icon(Icons.add, color: Colors.red),
+          label: const Text("Add Business", style: TextStyle(color: Colors.red)),
+          onPressed: () {
+            setState(() {
+              _businesses.add(BusinessForm());
+            });
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildBusinessImages(BusinessForm business) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          "Business Images (max 5)",
+          style: TextStyle(fontWeight: FontWeight.w600),
+        ),
+        const SizedBox(height: 8),
+
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            ...business.images.asMap().entries.map((entry) {
+              final index = entry.key;
+              final image = entry.value;
+
+              return Stack(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Image.file(
+                      image,
+                      width: 80,
+                      height: 80,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                  Positioned(
+                    top: -6,
+                    right: -6,
+                    child: IconButton(
+                      icon: const Icon(Icons.cancel, color: Colors.red),
+                      onPressed: () {
+                        setState(() {
+                          business.images.removeAt(index);
+                        });
+                      },
+                    ),
+                  ),
+                ],
+              );
+            }),
+
+            // Add image button
+            if (business.images.length < 5)
+              GestureDetector(
+                onTap: () => _pickBusinessImage(business),
+                child: Container(
+                  width: 80,
+                  height: 80,
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.add_a_photo, color: Colors.grey),
+                ),
+              ),
+          ],
+        ),
       ],
     );
   }
@@ -443,19 +679,180 @@ class _EditProfilePageState extends State<EditProfilePage> {
     }
   }
 
-  void _saveProfile() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(widget.fromRegister
-            ? 'Profile submitted! Admin will review your account.'
-            : 'Profile saved successfully!'),
-      ),
-    );
+  Future<void> _pickBusinessImage(BusinessForm business) async {
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(source: ImageSource.gallery);
 
-    if (widget.fromRegister) {
-      Navigator.pushReplacementNamed(context, '/pendingApproval');
-    } else {
-      Navigator.pop(context);
+    if (picked != null) {
+      setState(() {
+        if (business.images.length < 5) {
+          business.images.add(File(picked.path));
+        }
+      });
+    }
+  }
+
+  Future<List<String>> _uploadBusinessImages(
+    String userId,
+    BusinessForm business,
+  ) async {
+    final List<String> urls = [];
+
+    for (final image in business.images) {
+      final ref = FirebaseStorage.instance
+          .ref()
+          .child('business_images/$userId/${DateTime.now().millisecondsSinceEpoch}.jpg');
+
+      await ref.putFile(image);
+      urls.add(await ref.getDownloadURL());
+    }
+
+    return urls;
+  }
+
+  Future<void> _saveProfile() async {
+    final user = _auth.currentUser;
+    if (user == null) return;
+
+    try {
+      final userRef = _firestore.collection('users').doc(user.uid);
+
+      final profileData = {
+        // Core identity
+        'uid': user.uid,
+        'email': _emailController.text.trim(),
+        'firstName': _firstNameController.text.trim(),
+        'lastName': _lastNameController.text.trim(),
+
+        // Personal info
+        'profileImageUrl': _profileImageUrl,
+        'street': _streetController.text.trim(),
+        'barangay': _barangayController.text.trim(),
+        'city': _cityController.text.trim(),
+        'province': _provinceController.text.trim(),
+        'zipCode': _zipCodeController.text.trim(),
+        'isMetroManila': _isMetroManila,
+
+        // Professional
+        'title': _titleController.text.trim(),
+        'bio': _bioController.text.trim(),
+
+        // Contact
+        'phoneNumber': _phoneController.text.trim(),
+        'website': _websiteController.text.trim(),
+
+        // Social links
+        'socialLinks': {
+          'link1': _socialLink1Controller.text.trim(),
+          'link2': _socialLink2Controller.text.trim(),
+        },
+
+        // Files / verification
+        'dtiFileUrl': _dtiFileUrl,
+        // DEV MODE - Replace after thorough testing. ==================================================
+        // 'verificationStatus': widget.fromRegister ? 'pending' : 'approved',
+        'verificationStatus': _devBypassApproval
+          ? 'approved'
+          : (widget.fromRegister ? 'pending' : 'approved'),
+        // DEV MODE - Replace after thorough testing. ==================================================
+        'isVerified': false,
+
+        // App state
+        'profileCompleted': true,
+        // DEV MODE - Replace after thorough testing. ==================================================
+        // 'accountStatus': widget.fromRegister ? 'pending' : 'active',
+        'accountStatus': _devBypassApproval
+          ? 'active'
+          : (widget.fromRegister ? 'pending' : 'active'),
+        // DEV MODE - Replace after thorough testing. ==================================================
+
+        // Metadata
+        'updatedAt': FieldValue.serverTimestamp(),
+      };
+
+      // Create or update safely
+      await userRef.set(
+        {
+          ...profileData,
+          'createdAt': FieldValue.serverTimestamp(),
+        },
+        SetOptions(merge: true),
+      );
+
+      final businessesRef = userRef.collection('businesses');
+
+      for (final business in _businesses) {
+        // Skip empty business cards
+        if (business.name.text.trim().isEmpty) continue;
+
+        // Upload images if needed
+        if (business.images.isNotEmpty) {
+          business.imageUrls = await _uploadBusinessImages(user.uid, business);
+        }
+
+        final businessData = {
+          'name': business.name.text.trim(),
+          'description': business.description.text.trim(),
+          'role': business.role.text.trim(),
+          'contact': business.contact.text.trim(),
+          'address': business.address.text.trim(),
+          'images': business.imageUrls,
+          'updatedAt': FieldValue.serverTimestamp(),
+        };
+
+        if (business.id == null) {
+          // CREATE
+          final doc = await businessesRef.add({
+            ...businessData,
+            'createdAt': FieldValue.serverTimestamp(),
+          });
+          business.id = doc.id;
+        } else {
+          // UPDATE
+          await businessesRef.doc(business.id).set(
+            businessData,
+            SetOptions(merge: true),
+          );
+        }
+      }
+      
+      for (final id in _deletedBusinessIds) {
+        await userRef.collection('businesses').doc(id).delete();
+      }
+      _deletedBusinessIds.clear();
+
+      // UI feedback
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            widget.fromRegister
+                ? 'Profile submitted! Awaiting admin approval.'
+                : 'Profile saved successfully!',
+          ),
+        ),
+      );
+
+      // Navigation
+      // DEV MODE - Remove the ' && !_devBypassApproval' part after thorough testing ====================
+      if (widget.fromRegister && !_devBypassApproval) {
+        Navigator.pushReplacementNamed(context, '/pendingApproval');
+      } else {
+        Navigator.pop(context);
+      }
+      // DEV MODE - Remove the ' && !_devBypassApproval' part after thorough testing ====================
+    } catch (e) {
+      debugPrint('Error saving profile: $e');
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Failed to save profile. Please try again.'),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 }
