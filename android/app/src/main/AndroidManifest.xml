@@ -7,6 +7,12 @@
         android:label="smart_card"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+
+        <!--GOOGLE MAPS API-->
+        <meta-data
+        android:name="com.google.android.geo.API_KEY"
+        android:value="AIzaSyCG6uC0RBBfe2yktauBFhVXCGuEfdwUg7c"/>
+
         <activity
             android:name=".MainActivity"
             android:exported="true"

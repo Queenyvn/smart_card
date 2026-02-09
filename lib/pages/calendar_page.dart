@@ -1,38 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:table_calendar/table_calendar.dart';
+import 'package:intl/intl.dart';
+import '../backend/backend.dart';
 
-/// ===============================
-/// MODEL: Single Calendar Event
-/// ===============================
-class CalendarEvent {
-  final String title;
-  final TimeOfDay startTime;
-  final TimeOfDay endTime;
+const Color cbocPrimary = Color(0xFFB71C1C);
+const Color cbocSecondary = Color(0xFFD32F2F);
+const Color cbocAccent = Color(0xFFFFCDD2);
 
-  CalendarEvent({
-    required this.title,
-    required this.startTime,
-    required this.endTime,
-  });
-}
-
-/// =======================================
-/// HELPER MODEL: Event + Its Actual Date
-/// Used for listing monthly events
-/// =======================================
-class UpcomingEvent {
-  final DateTime date;
-  final CalendarEvent event;
-
-  UpcomingEvent({
-    required this.date,
-    required this.event,
-  });
-}
-
-/// ===============================
-/// CALENDAR PAGE
-/// ===============================
 class CalendarPage extends StatefulWidget {
   const CalendarPage({super.key});
 
@@ -41,100 +15,223 @@ class CalendarPage extends StatefulWidget {
 }
 
 class _CalendarPageState extends State<CalendarPage> {
-  /// Currently focused month
   DateTime _focusedDay = DateTime.now();
-
-  /// Selected calendar day
   DateTime? _selectedDay;
 
-  /// Stores all events (grouped by date)
-  final Map<DateTime, List<CalendarEvent>> _events = {};
+  final Set<String> _attendingEvents = {};
 
-  /// ===============================
-  /// INITIAL DEMO EVENTS (Proposal)
-  /// ===============================
-  @override
-  void initState() {
-    super.initState();
+  final _titleCtrl = TextEditingController();
+  final _venueCtrl = TextEditingController();
+  final _descCtrl = TextEditingController();
+  final _posterUrlCtrl = TextEditingController(); // NEW: controller for URL input
 
-    // TEMPORARY EVENTS FOR PROPOSAL DEMO
-    _addEvent(
-      'Project Proposal Meeting',
-      DateTime.now().add(const Duration(days: 1)),
-      const TimeOfDay(hour: 14, minute: 0),
-      const TimeOfDay(hour: 15, minute: 0),
-    );
+  DateTime? _eventDate;
+  TimeOfDay? _startTime;
+  TimeOfDay? _endTime;
 
-    _addEvent(
-      'CBOC General Assembly',
-      DateTime.now().add(const Duration(days: 4)),
-      const TimeOfDay(hour: 18, minute: 0),
-      const TimeOfDay(hour: 22, minute: 0),
-    );
-
-    _addEvent(
-      'Entrepreneurship Workshop',
-      DateTime.now().add(const Duration(days: 9)),
-      const TimeOfDay(hour: 9, minute: 0),
-      const TimeOfDay(hour: 15, minute: 0),
-    );
-  }
-
-  /// ===================================
-  /// GET EVENTS FOR A SPECIFIC DAY
-  /// ===================================
-  List<CalendarEvent> _getEventsForDay(DateTime day) {
-    final key = DateTime(day.year, day.month, day.day);
-    return _events[key] ?? [];
-  }
-
-  /// ===================================
-  /// GET ALL EVENTS FOR THE CURRENT MONTH
-  /// ===================================
-  List<UpcomingEvent> _getMonthEvents() {
-    final List<UpcomingEvent> monthEvents = [];
-
-    _events.forEach((date, events) {
-      if (date.year == _focusedDay.year &&
-          date.month == _focusedDay.month) {
-        for (var event in events) {
-          monthEvents.add(
-            UpcomingEvent(date: date, event: event),
-          );
-        }
-      }
-    });
-
-    // Sort by date (earliest first)
-    monthEvents.sort((a, b) => a.date.compareTo(b.date));
-    return monthEvents;
-  }
-
-  /// ===============================
-  /// ADD EVENT TO MAP
-  /// ===============================
-  void _addEvent(
-    String title,
-    DateTime date,
-    TimeOfDay start,
-    TimeOfDay end,
-  ) {
-    final key = DateTime(date.year, date.month, date.day);
-    setState(() {
-      _events.putIfAbsent(key, () => []);
-      _events[key]!.add(
-        CalendarEvent(
-          title: title,
-          startTime: start,
-          endTime: end,
+  // =====================================================
+  // EVENT DETAILS
+  // =====================================================
+  void _showEventDetails(UpcomingEvent item) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(item.event.title),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              item.event.venue,
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Text(item.event.description),
+            const SizedBox(height: 12),
+            if (item.event.imageUrl != null)
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Image.network(
+                  item.event.imageUrl!,
+                  height: 140,
+                  width: double.infinity,
+                  fit: BoxFit.cover,
+                ),
+              ),
+            const SizedBox(height: 12),
+            Text(
+              '${_formatDate(item.date)}\n'
+              '${_formatTime(item.event.startTime)} - ${_formatTime(item.event.endTime)}',
+            ),
+          ],
         ),
-      );
-    });
+        actions: [
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: cbocPrimary,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(30),
+              ),
+            ),
+            onPressed: () => _attendEvent(item.event, item.date),
+            child: const Text('Attend'),
+          ),
+        ],
+      ),
+    );
   }
 
-  /// ===============================
-  /// FORMAT TIME (UI DISPLAY)
-  /// ===============================
+  // =====================================================
+  // ADD EVENT DIALOG
+  // =====================================================
+  void _openAddEventDialog() {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        backgroundColor: Colors.grey.shade50,
+        title: const Text(
+          'Add Event',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            children: [
+              _inputField(_titleCtrl, 'Event Title'),
+              const SizedBox(height: 12),
+              _inputField(_venueCtrl, 'Venue'),
+              const SizedBox(height: 12),
+              _inputField(_descCtrl, 'Description', maxLines: 4),
+
+              // EVENT POSTER URL INPUT
+              const SizedBox(height: 16),
+              _inputField(_posterUrlCtrl, 'Event Poster URL'),
+
+              const SizedBox(height: 18),
+
+              _actionButton('Select Date', () async {
+                final picked = await showDatePicker(
+                  context: context,
+                  firstDate: DateTime.now(),
+                  lastDate: DateTime(2030),
+                  initialDate: DateTime.now(),
+                );
+                if (picked != null) setState(() => _eventDate = picked);
+              }),
+
+              _actionButton('Start Time', () async {
+                final picked = await showTimePicker(
+                  context: context,
+                  initialTime: TimeOfDay.now(),
+                );
+                if (picked != null) _startTime = picked;
+              }),
+
+              _actionButton('End Time', () async {
+                final picked = await showTimePicker(
+                  context: context,
+                  initialTime: TimeOfDay.now(),
+                );
+                if (picked != null) _endTime = picked;
+              }),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: cbocPrimary,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(30),
+              ),
+            ),
+            onPressed: () async {
+              if (_eventDate == null || _startTime == null || _endTime == null) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Please select date, start, and end time!'),
+                  ),
+                );
+                return;
+              }
+
+              await BackendService.submitEventForApproval(
+                title: _titleCtrl.text,
+                venue: _venueCtrl.text,
+                description: _descCtrl.text,
+                date: _eventDate!,
+                start: _startTime!,
+                end: _endTime!,
+                posterUrl: _posterUrlCtrl.text.isEmpty ? null : _posterUrlCtrl.text, // use URL
+              );
+
+              Navigator.pop(context);
+
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Event submitted for admin approval'),
+                ),
+              );
+            },
+            child: const Text('Submit'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // =====================================================
+  // UI HELPERS
+  // =====================================================
+  Widget _inputField(
+    TextEditingController controller,
+    String label, {
+    int maxLines = 1,
+  }) {
+    return TextField(
+      controller: controller,
+      maxLines: maxLines,
+      decoration: InputDecoration(
+        labelText: label,
+        filled: true,
+        fillColor: Colors.white,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide.none,
+        ),
+      ),
+    );
+  }
+
+  Widget _actionButton(String label, VoidCallback onTap) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: ElevatedButton(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.white,
+          foregroundColor: cbocSecondary,
+          elevation: 2,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(30),
+          ),
+        ),
+        onPressed: onTap,
+        child: Text(label),
+      ),
+    );
+  }
+
+  // =====================================================
+  // CALENDAR + EVENTS LIST
+  // =====================================================
+  String _formatDate(DateTime date) =>
+      DateFormat('MMMM dd, yyyy').format(date);
+
   String _formatTime(TimeOfDay time) {
     final now = DateTime.now();
     final dt =
@@ -142,238 +239,92 @@ class _CalendarPageState extends State<CalendarPage> {
     return TimeOfDay.fromDateTime(dt).format(context);
   }
 
-  /// ===============================
-  /// ADD EVENT MODAL (Bottom Sheet)
-  /// ===============================
-  void _showAddEventModal() {
-    final titleController = TextEditingController();
-    DateTime selectedDate = _selectedDay ?? DateTime.now();
-    TimeOfDay startTime = TimeOfDay.now();
-    TimeOfDay endTime =
-        TimeOfDay(hour: startTime.hour + 1, minute: startTime.minute);
+  Future<void> _attendEvent(CalendarEvent event, DateTime date) async {
+    final key = '${event.title}-${date.toIso8601String()}';
+    if (_attendingEvents.contains(key)) return;
 
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (_) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            return Padding(
-              padding: EdgeInsets.only(
-                bottom: MediaQuery.of(context).viewInsets.bottom,
-                left: 16,
-                right: 16,
-                top: 20,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text(
-                    'Create Event',
-                    style:
-                        TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 16),
+    final result =
+        await BackendService.attendEvent(event: event, date: date);
 
-                  TextField(
-                    controller: titleController,
-                    decoration: const InputDecoration(
-                      labelText: 'Event Title',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: () async {
-                            final picked = await showTimePicker(
-                              context: context,
-                              initialTime: startTime,
-                            );
-                            if (picked != null) {
-                              setModalState(() => startTime = picked);
-                            }
-                          },
-                          child: Text('Start: ${_formatTime(startTime)}'),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: () async {
-                            final picked = await showTimePicker(
-                              context: context,
-                              initialTime: endTime,
-                            );
-                            if (picked != null) {
-                              setModalState(() => endTime = picked);
-                            }
-                          },
-                          child: Text('End: ${_formatTime(endTime)}'),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        "${selectedDate.year}-${selectedDate.month}-${selectedDate.day}",
-                        style: const TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                      TextButton(
-                        child: const Text('Change Date'),
-                        onPressed: () async {
-                          final picked = await showDatePicker(
-                            context: context,
-                            firstDate: DateTime(2020),
-                            lastDate: DateTime(2030),
-                            initialDate: selectedDate,
-                          );
-                          if (picked != null) {
-                            setModalState(() => selectedDate = picked);
-                          }
-                        },
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-
-                  ElevatedButton(
-                    onPressed: () {
-                      if (titleController.text.isNotEmpty) {
-                        _addEvent(
-                          titleController.text,
-                          selectedDate,
-                          startTime,
-                          endTime,
-                        );
-                        Navigator.pop(context);
-                      }
-                    },
-                    child: const Text('Submit Event'),
-                  ),
-                  const SizedBox(height: 16),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
+    if (result.success) {
+      setState(() => _attendingEvents.add(key));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('You are now attending this event!')),
+      );
+    }
   }
 
-  /// ===============================
-  /// UI BUILD
-  /// ===============================
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.grey.shade100,
       appBar: AppBar(
-        title: const Text('Calendar'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.pop(context),
-        ),
+        title:
+            const Text('Calendar', style: TextStyle(fontWeight: FontWeight.bold)),
       ),
-
       floatingActionButton: FloatingActionButton(
-        onPressed: _showAddEventModal,
+        backgroundColor: cbocPrimary,
+        onPressed: _openAddEventDialog,
         child: const Icon(Icons.add),
       ),
-
       body: Column(
         children: [
-          /// CALENDAR VIEW
           TableCalendar(
             firstDay: DateTime.utc(2020, 1, 1),
             lastDay: DateTime.utc(2030, 12, 31),
             focusedDay: _focusedDay,
-            selectedDayPredicate: (day) =>
-                isSameDay(_selectedDay, day),
-            eventLoader: _getEventsForDay,
-            onDaySelected: (selectedDay, focusedDay) {
+            selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
+            eventLoader: BackendService.getEventsForDay,
+            onDaySelected: (selected, focused) {
               setState(() {
-                _selectedDay = selectedDay;
-                _focusedDay = focusedDay;
+                _selectedDay = selected;
+                _focusedDay = focused;
               });
             },
-            onPageChanged: (focusedDay) {
-              setState(() => _focusedDay = focusedDay);
-            },
             headerStyle: const HeaderStyle(
-              formatButtonVisible: false,
               titleCentered: true,
+              formatButtonVisible: false,
+            ),
+            calendarStyle: CalendarStyle(
+              todayDecoration:
+                  BoxDecoration(color: cbocAccent, shape: BoxShape.circle),
+              selectedDecoration:
+                  BoxDecoration(color: cbocPrimary, shape: BoxShape.circle),
+              markerDecoration:
+                  const BoxDecoration(color: cbocSecondary, shape: BoxShape.circle),
             ),
           ),
-
-          /// MONTHLY EVENTS LIST (NO DATE CLICK REQUIRED)
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                'Events This Month',
-                style:
-                    TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-            ),
-          ),
-
-          SizedBox(
-            height: 220,
-            child: ListView(
-              children: _getMonthEvents().map((item) {
-                return Card(
-                  margin: const EdgeInsets.symmetric(
-                      horizontal: 16, vertical: 6),
-                  child: ListTile(
-                    title: Text(item.event.title),
-                    subtitle: Text(
-                      '${item.date.year}-${item.date.month}-${item.date.day} • '
-                      '${_formatTime(item.event.startTime)} – ${_formatTime(item.event.endTime)}',
-                    ),
-                    trailing: ElevatedButton(
-                      onPressed: () {},
-                      child: const Text('Attend'),
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
-
-          /// SELECTED DAY EVENTS (OPTIONAL INTERACTION)
           Expanded(
-            child: _selectedDay == null
-                ? const Center(child: Text('Select a date'))
-                : ListView(
-                    children:
-                        _getEventsForDay(_selectedDay!).map((event) {
-                      return Card(
-                        margin: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 8),
-                        child: ListTile(
-                          title: Text(event.title),
-                          subtitle: Text(
-                            '${_formatTime(event.startTime)} – ${_formatTime(event.endTime)}',
-                          ),
-                          trailing: ElevatedButton(
-                            onPressed: () {},
-                            child: const Text('Attend'),
-                          ),
+            child: StreamBuilder<List<UpcomingEvent>>(
+              stream: BackendService.approvedEventsStream(),
+              builder: (context, snapshot) {
+                if (!snapshot.hasData) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+
+                final monthEvents = snapshot.data!
+                    .where((e) =>
+                        e.date.year == _focusedDay.year &&
+                        e.date.month == _focusedDay.month)
+                    .toList();
+
+                return ListView(
+                  children: monthEvents.map((item) {
+                    return Card(
+                      margin: const EdgeInsets.all(12),
+                      child: ListTile(
+                        title: Text(item.event.title),
+                        subtitle: Text(
+                          '${item.event.venue}\n${_formatDate(item.date)} • '
+                          '${_formatTime(item.event.startTime)} - ${_formatTime(item.event.endTime)}',
                         ),
-                      );
-                    }).toList(),
-                  ),
+                        onTap: () => _showEventDetails(item),
+                      ),
+                    );
+                  }).toList(),
+                );
+              },
+            ),
           ),
         ],
       ),

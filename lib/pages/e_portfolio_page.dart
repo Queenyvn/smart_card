@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class EPortfolioPage extends StatefulWidget {
   const EPortfolioPage({super.key});
@@ -8,6 +11,27 @@ class EPortfolioPage extends StatefulWidget {
 }
 
 class _EPortfolioPageState extends State<EPortfolioPage> {
+  LatLng? _businessLocation;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserLocation();
+  }
+
+  Future<void> _loadUserLocation() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid != null) {
+      final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+      if (doc.exists && doc.data()?['location'] != null) {
+        final loc = doc.data()!['location'];
+        setState(() {
+          _businessLocation = LatLng(loc['lat'], loc['lng']);
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -58,7 +82,27 @@ class _EPortfolioPageState extends State<EPortfolioPage> {
                 color: Colors.grey,
               ),
             ),
-            const SizedBox(height: 30),
+            const SizedBox(height: 16),
+
+            // MAP DISPLAY
+            if (_businessLocation != null) ...[
+              SizedBox(
+                height: 250,
+                child: GoogleMap(
+                  initialCameraPosition: CameraPosition(
+                    target: _businessLocation!,
+                    zoom: 16,
+                  ),
+                  markers: {
+                    Marker(
+                      markerId: const MarkerId("businessPin"),
+                      position: _businessLocation!,
+                    ),
+                  },
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
 
             /// Contact & Address
             ListTile(
@@ -69,10 +113,11 @@ class _EPortfolioPageState extends State<EPortfolioPage> {
               leading: const Icon(Icons.phone, color: Colors.red),
               title: const Text("+63 912 345 6789"),
             ),
-            ListTile(
-              leading: const Icon(Icons.location_on, color: Colors.red),
-              title: const Text("Block 3 Lot 5, Tejeros Convention, Rosario, Cavite, 4106"),
-            ),
+            if (_businessLocation != null)
+              ListTile(
+                leading: const Icon(Icons.location_on, color: Colors.red),
+                title: Text("Lat: ${_businessLocation!.latitude}, Lng: ${_businessLocation!.longitude}"),
+              ),
           ],
         ),
       ),

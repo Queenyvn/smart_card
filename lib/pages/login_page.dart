@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import '../backend/backend.dart';
 import '../providers/google_sign_in_provider.dart';
-import 'package:flutter/foundation.dart';
+import 'register_page.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -14,6 +13,7 @@ class LoginPage extends StatefulWidget {
 class _LoginPageState extends State<LoginPage> {
   final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+
   bool _rememberMe = false;
   bool _isHovering = false;
   bool _isLoading = false;
@@ -26,33 +26,31 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
+  /// ===============================
+  /// UI → BACKEND HANDOFF ONLY
+  /// ===============================
   Future<void> _loginUser() async {
-  setState(() {
-    _isLoading = true;
-    _errorMessage = null;
-  });
-
-  final username = _usernameController.text.trim();
-  final password = _passwordController.text.trim();
-
-  // dev bypass credential
-  if (kDebugMode) {
-    if (username == 'dev' && password == 'dev') {
-      await Future.delayed(const Duration(milliseconds: 500));
-      Navigator.pushReplacementNamed(context, '/home');
-      return;
-    }
-  
-
-    // block everything else during dev
     setState(() {
-      _errorMessage = 'DEV MODE: use username "dev" and password "dev".';
-      _isLoading = false;
+      _isLoading = true;
+      _errorMessage = null;
     });
-    return;
-  }  
-}
 
+    final result = await BackendService.login(
+      username: _usernameController.text.trim(),
+      password: _passwordController.text.trim(),
+    );
+
+    if (!mounted) return;
+
+    if (result.success) {
+      Navigator.pushReplacementNamed(context, '/home');
+    } else {
+      setState(() {
+        _errorMessage = result.message;
+        _isLoading = false;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -129,7 +127,7 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                   TextButton(
                     onPressed: () {
-                      // TODO: Forgot Password logic
+                      // UI placeholder only
                     },
                     child: const Text(
                       "Forgot Password?",
@@ -171,9 +169,9 @@ class _LoginPageState extends State<LoginPage> {
                     ),
               const SizedBox(height: 20),
 
-              // OR Divider //
+              // OR Divider
               Padding(
-                padding: EdgeInsets.symmetric(horizontal: 10),
+                padding: const EdgeInsets.symmetric(horizontal: 10),
                 child: Row(
                   children: const [
                     Flexible(child: Divider(thickness: 1)),
@@ -185,98 +183,84 @@ class _LoginPageState extends State<LoginPage> {
                   ],
                 ),
               ),
-              // END OF OR DIVIDER //
               const SizedBox(height: 20),
-            
 
-              // google sign in button
-              Column(
-                children: [
-
-                  OutlinedButton(
-                    style: OutlinedButton.styleFrom(
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(30),
-                      ),
-                      side: const BorderSide(color: Colors.grey),
-                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
-                      backgroundColor: Colors.white,
-                      minimumSize: const Size(double.infinity, 50),
-                    ),
-                    onPressed: () async {
-                      final googleProvider = GoogleSignInProvider();
-                      final user = await googleProvider.signInWithGoogle();
-
-                      if (user != null) {
-                        // Check if user already exists in Firestore
-                        final userDoc = await FirebaseFirestore.instance
-                            .collection('users')
-                            .doc(user.uid)
-                            .get();
-
-                        if (userDoc.exists) {
-                          // REDIRECT TO HOME PAGE IF ALREADY REGISTERED //
-                          Navigator.pushReplacementNamed(context, '/home');
-                        } else {
-                          // REDIRECT TO REGISTRATION PAGE IF NEW USER //
-                          // (pass Google email so they don’t need to type it again) //
-                          Navigator.pushReplacementNamed(
-                            context,
-                            '/register',
-                            arguments: {
-                              'email': user.email,
-                              'displayName': user.displayName ?? '',
-                            },
-                          );
-                        }
-                      } else {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text("Google sign-in failed. Please try again.")),
-                        );
-                      }
-                    },
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Image.asset(
-                          'assets/google_logo.png',
-                          height: 24,
-                        ),
-                        const SizedBox(width: 12),
-                        const Text(
-                          "Sign in with Google",
-                          style: TextStyle(
-                            color: Colors.black87,
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        )
-                      ],
-                    ),
+              // Google Sign-In (still UI-level trigger)
+              OutlinedButton(
+                style: OutlinedButton.styleFrom(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(30),
                   ),
-                ],
-              ),                            
+                  side: const BorderSide(color: Colors.grey),
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 12,
+                    horizontal: 20,
+                  ),
+                  backgroundColor: Colors.white,
+                  minimumSize: const Size(double.infinity, 50),
+                ),
+                onPressed: () async {
+                  final googleProvider = GoogleSignInProvider();
+                  final user = await googleProvider.signInWithGoogle();
+
+                  if (!mounted) return;
+
+                  if (user != null) {
+                    Navigator.pushReplacementNamed(context, '/home');
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text("Google sign-in failed."),
+                      ),
+                    );
+                  }
+                },
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Image.asset('assets/google_logo.png', height: 24),
+                    const SizedBox(width: 12),
+                    const Text(
+                      "Sign in with Google",
+                      style: TextStyle(
+                        color: Colors.black87,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
               const SizedBox(height: 30),
-              // END OF GOOGLE SIGN IN CODE //
 
-
-              // Register Text with hover effect
-              MouseRegion(
-                onEnter: (_) => setState(() => _isHovering = true),
-                onExit: (_) => setState(() => _isHovering = false),
-                cursor: SystemMouseCursors.click,
-                child: GestureDetector(
-                  onTap: () {
-                    Navigator.pushNamed(context, '/register');
+              // Disabled Register Text
+              // Registration Button
+              Padding(
+                padding: const EdgeInsets.only(top: 20),
+                child: OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    side: const BorderSide(color: Color(0xFFD32F2F)),
+                    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
+                    backgroundColor: Colors.white,
+                    minimumSize: const Size(double.infinity, 50),
+                  ),
+                  onPressed: () {
+                    // Navigate to the new RegisterPage
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const RegisterPage()),
+                    );
                   },
-                  child: Text(
-                    "Doesn’t have an account yet? Register here",
+                  child: const Text(
+                    "Register an Account",
                     style: TextStyle(
-                      color: _isHovering
-                          ? const Color(0xFFD32F2F)
-                          : Colors.black87,
-                      fontWeight:
-                          _isHovering ? FontWeight.bold : FontWeight.normal,
+                      color: Color(0xFFD32F2F),
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
                 ),
