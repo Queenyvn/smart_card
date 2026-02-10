@@ -14,6 +14,8 @@ class CalendarPage extends StatefulWidget {
   State<CalendarPage> createState() => _CalendarPageState();
 }
 
+
+
 class _CalendarPageState extends State<CalendarPage> {
   DateTime _focusedDay = DateTime.now();
   DateTime? _selectedDay;
@@ -23,69 +25,18 @@ class _CalendarPageState extends State<CalendarPage> {
   final _titleCtrl = TextEditingController();
   final _venueCtrl = TextEditingController();
   final _descCtrl = TextEditingController();
-  final _posterUrlCtrl = TextEditingController(); // NEW: controller for URL input
+  final _posterUrlCtrl = TextEditingController();
 
   DateTime? _eventDate;
   TimeOfDay? _startTime;
   TimeOfDay? _endTime;
 
   // =====================================================
-  // EVENT DETAILS
-  // =====================================================
-  void _showEventDetails(UpcomingEvent item) {
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text(item.event.title),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              item.event.venue,
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            Text(item.event.description),
-            const SizedBox(height: 12),
-            if (item.event.imageUrl != null)
-              ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: Image.network(
-                  item.event.imageUrl!,
-                  height: 140,
-                  width: double.infinity,
-                  fit: BoxFit.cover,
-                ),
-              ),
-            const SizedBox(height: 12),
-            Text(
-              '${_formatDate(item.date)}\n'
-              '${_formatTime(item.event.startTime)} - ${_formatTime(item.event.endTime)}',
-            ),
-          ],
-        ),
-        actions: [
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: cbocPrimary,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(30),
-              ),
-            ),
-            onPressed: () => _attendEvent(item.event, item.date),
-            child: const Text('Attend'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // =====================================================
   // ADD EVENT DIALOG
   // =====================================================
   void _openAddEventDialog() {
+    final _slotsCtrl = TextEditingController();
+
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
@@ -103,38 +54,111 @@ class _CalendarPageState extends State<CalendarPage> {
               _inputField(_venueCtrl, 'Venue'),
               const SizedBox(height: 12),
               _inputField(_descCtrl, 'Description', maxLines: 4),
-
-              // EVENT POSTER URL INPUT
               const SizedBox(height: 16),
               _inputField(_posterUrlCtrl, 'Event Poster URL'),
-
               const SizedBox(height: 18),
 
-              _actionButton('Select Date', () async {
-                final picked = await showDatePicker(
-                  context: context,
-                  firstDate: DateTime.now(),
-                  lastDate: DateTime(2030),
-                  initialDate: DateTime.now(),
-                );
-                if (picked != null) setState(() => _eventDate = picked);
-              }),
+              // ==========================
+              // DATE FIELD 
+              // ==========================
+              TextField(
+                readOnly: true, 
+                decoration: InputDecoration(
+                  labelText: 'Select Date',
+                  filled: true,
+                  fillColor: Colors.white,
+                  suffixIcon: const Icon(Icons.calendar_today),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+                controller: TextEditingController(
+                  text: _eventDate == null
+                      ? ''
+                      : DateFormat('MM/dd/yyyy').format(_eventDate!), // SHOW DATE
+                ),
+                onTap: () async {
+                  final picked = await showDatePicker(
+                    context: context,
+                    firstDate: DateTime.now(),
+                    lastDate: DateTime(2030),
+                    initialDate: _eventDate ?? DateTime.now(),
+                  );
+                  if (picked != null) {
+                    setState(() => _eventDate = picked); // UPDATE FIELD
+                  }
+                },
+              ),
 
-              _actionButton('Start Time', () async {
-                final picked = await showTimePicker(
-                  context: context,
-                  initialTime: TimeOfDay.now(),
-                );
-                if (picked != null) _startTime = picked;
-              }),
+              // ==========================
+              // START TIME FIELD
+              // ==========================
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      readOnly: true,
+                      decoration: InputDecoration(
+                        labelText: 'Start Time',
+                        filled: true,
+                        fillColor: Colors.white,
+                        suffixIcon: const Icon(Icons.access_time),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: BorderSide.none,
+                        ),
+                      ),
+                      controller: TextEditingController(
+                        text: _startTime == null ? '' : _startTime!.format(context),
+                      ),
+                      onTap: () async {
+                        final picked = await showTimePicker(
+                          context: context,
+                          initialTime: _startTime ?? TimeOfDay.now(),
+                        );
+                        if (picked != null) {
+                          setState(() => _startTime = picked);
+                        }
+                      },
+                    ),
+                  ),
 
-              _actionButton('End Time', () async {
-                final picked = await showTimePicker(
-                  context: context,
-                  initialTime: TimeOfDay.now(),
-                );
-                if (picked != null) _endTime = picked;
-              }),
+                  const SizedBox(width: 12), // spacing between start and end time
+
+                  Expanded(
+                    child: TextField(
+                      readOnly: true,
+                      decoration: InputDecoration(
+                        labelText: 'End Time',
+                        filled: true,
+                        fillColor: Colors.white,
+                        suffixIcon: const Icon(Icons.access_time),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: BorderSide.none,
+                        ),
+                      ),
+                      controller: TextEditingController(
+                        text: _endTime == null ? '' : _endTime!.format(context),
+                      ),
+                      onTap: () async {
+                        final picked = await showTimePicker(
+                          context: context,
+                          initialTime: _endTime ?? TimeOfDay.now(),
+                        );
+                        if (picked != null) {
+                          setState(() => _endTime = picked);
+                        }
+                      },
+                    ),
+                  ),
+                ],
+              ),
+
+              // SLOTS FIELD
+              const SizedBox(height: 12),
+              _inputField(_slotsCtrl, 'Number of Available Slots'),
             ],
           ),
         ),
@@ -151,10 +175,22 @@ class _CalendarPageState extends State<CalendarPage> {
               ),
             ),
             onPressed: () async {
-              if (_eventDate == null || _startTime == null || _endTime == null) {
+              if (_eventDate == null ||
+                  _startTime == null ||
+                  _endTime == null ||
+                  _slotsCtrl.text.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Please fill in all fields!')),
+                );
+                return;
+              }
+
+              final availableSlots = int.tryParse(_slotsCtrl.text);
+              if (availableSlots == null || availableSlots <= 0) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
-                    content: Text('Please select date, start, and end time!'),
+                    content:
+                        Text('Please enter a valid number of available slots'),
                   ),
                 );
                 return;
@@ -167,7 +203,9 @@ class _CalendarPageState extends State<CalendarPage> {
                 date: _eventDate!,
                 start: _startTime!,
                 end: _endTime!,
-                posterUrl: _posterUrlCtrl.text.isEmpty ? null : _posterUrlCtrl.text, // use URL
+                posterUrl:
+                    _posterUrlCtrl.text.isEmpty ? null : _posterUrlCtrl.text,
+                availableSlots: availableSlots,
               );
 
               Navigator.pop(context);
@@ -185,8 +223,80 @@ class _CalendarPageState extends State<CalendarPage> {
     );
   }
 
+  
+
   // =====================================================
-  // UI HELPERS
+  // DATE FIELD WIDGET
+  // =====================================================
+  Widget _dateField() {
+    return TextField(
+      readOnly: true, // NEW
+      decoration: InputDecoration(
+        labelText: 'Select Date',
+        filled: true,
+        fillColor: Colors.white,
+        suffixIcon: const Icon(Icons.calendar_today),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide.none,
+        ),
+      ),
+      controller: TextEditingController(
+        text: _eventDate == null
+            ? ''
+            : DateFormat('MM/dd/yyyy').format(_eventDate!), // NEW
+      ),
+      onTap: () async {
+        final picked = await showDatePicker(
+          context: context,
+          firstDate: DateTime.now(),
+          lastDate: DateTime(2030),
+          initialDate: _eventDate ?? DateTime.now(),
+        );
+        if (picked != null) {
+          setState(() => _eventDate = picked); // CHANGED
+        }
+      },
+    );
+  }
+
+  // =====================================================
+  // TIME FIELD WIDGET
+  // =====================================================
+  Widget _timeField({
+    required String label,
+    required TimeOfDay? value,
+    required Function(TimeOfDay) onPick,
+  }) {
+    return TextField(
+      readOnly: true, // NEW
+      decoration: InputDecoration(
+        labelText: label,
+        filled: true,
+        fillColor: Colors.white,
+        suffixIcon: const Icon(Icons.access_time),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide.none,
+        ),
+      ),
+      controller: TextEditingController(
+        text: value == null ? '' : value.format(context), // NEW
+      ),
+      onTap: () async {
+        final picked = await showTimePicker(
+          context: context,
+          initialTime: value ?? TimeOfDay.now(),
+        );
+        if (picked != null) {
+          onPick(picked); // CHANGED
+        }
+      },
+    );
+  }
+
+  // =====================================================
+  // INPUT FIELD (UNCHANGED)
   // =====================================================
   Widget _inputField(
     TextEditingController controller,
@@ -208,59 +318,15 @@ class _CalendarPageState extends State<CalendarPage> {
     );
   }
 
-  Widget _actionButton(String label, VoidCallback onTap) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: ElevatedButton(
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.white,
-          foregroundColor: cbocSecondary,
-          elevation: 2,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(30),
-          ),
-        ),
-        onPressed: onTap,
-        child: Text(label),
-      ),
-    );
-  }
-
-  // =====================================================
-  // CALENDAR + EVENTS LIST
-  // =====================================================
-  String _formatDate(DateTime date) =>
-      DateFormat('MMMM dd, yyyy').format(date);
-
-  String _formatTime(TimeOfDay time) {
-    final now = DateTime.now();
-    final dt =
-        DateTime(now.year, now.month, now.day, time.hour, time.minute);
-    return TimeOfDay.fromDateTime(dt).format(context);
-  }
-
-  Future<void> _attendEvent(CalendarEvent event, DateTime date) async {
-    final key = '${event.title}-${date.toIso8601String()}';
-    if (_attendingEvents.contains(key)) return;
-
-    final result =
-        await BackendService.attendEvent(event: event, date: date);
-
-    if (result.success) {
-      setState(() => _attendingEvents.add(key));
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('You are now attending this event!')),
-      );
-    }
-  }
-
-  @override
+    @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.grey.shade100,
       appBar: AppBar(
-        title:
-            const Text('Calendar', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text(
+          'Calendar',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
       ),
       floatingActionButton: FloatingActionButton(
         backgroundColor: cbocPrimary,
@@ -286,12 +352,18 @@ class _CalendarPageState extends State<CalendarPage> {
               formatButtonVisible: false,
             ),
             calendarStyle: CalendarStyle(
-              todayDecoration:
-                  BoxDecoration(color: cbocAccent, shape: BoxShape.circle),
-              selectedDecoration:
-                  BoxDecoration(color: cbocPrimary, shape: BoxShape.circle),
-              markerDecoration:
-                  const BoxDecoration(color: cbocSecondary, shape: BoxShape.circle),
+              todayDecoration: BoxDecoration(
+                color: cbocAccent,
+                shape: BoxShape.circle,
+              ),
+              selectedDecoration: BoxDecoration(
+                color: cbocPrimary,
+                shape: BoxShape.circle,
+              ),
+              markerDecoration: BoxDecoration(
+                color: cbocSecondary,
+                shape: BoxShape.circle,
+              ),
             ),
           ),
           Expanded(
@@ -315,10 +387,11 @@ class _CalendarPageState extends State<CalendarPage> {
                       child: ListTile(
                         title: Text(item.event.title),
                         subtitle: Text(
-                          '${item.event.venue}\n${_formatDate(item.date)} • '
-                          '${_formatTime(item.event.startTime)} - ${_formatTime(item.event.endTime)}',
+                          '${item.event.venue}\n'
+                          '${DateFormat('MMMM dd, yyyy').format(item.date)} • '
+                          '${item.event.startTime.format(context)} - '
+                          '${item.event.endTime.format(context)}',
                         ),
-                        onTap: () => _showEventDetails(item),
                       ),
                     );
                   }).toList(),
@@ -330,4 +403,6 @@ class _CalendarPageState extends State<CalendarPage> {
       ),
     );
   }
+
 }
+

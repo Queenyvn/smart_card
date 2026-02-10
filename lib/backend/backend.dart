@@ -128,6 +128,7 @@ static Future<BackendResult> registerUserForApproval({
     required TimeOfDay start,
     required TimeOfDay end,
     required String? posterUrl,
+    required int availableSlots,
   }) async {
     final user = _auth.currentUser;
     if (user == null) throw Exception('User not logged in');
@@ -145,6 +146,7 @@ static Future<BackendResult> registerUserForApproval({
       'approved': false,
       'createdBy': user.uid,
       'createdAt': FieldValue.serverTimestamp(),
+      'availableSlots': availableSlots,
     });
   }
 
