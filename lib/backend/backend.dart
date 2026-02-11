@@ -111,7 +111,7 @@ static Future<BackendResult> login({
         .doc(userCredential.user!.uid)
         .get();
 
-    // ✅ FIX: Check if document exists first
+    
     if (!userDoc.exists) {
       await _auth.signOut();
       return BackendResult(
@@ -120,7 +120,7 @@ static Future<BackendResult> login({
       );
     }
 
-    // ✅ FIX: Safely get the approved field with null check
+    //  get the approved field with null check
     final userData = userDoc.data();
     if (userData == null || userData['approved'] != true) {
       await _auth.signOut();
@@ -133,7 +133,7 @@ static Future<BackendResult> login({
     return BackendResult(success: true);
     
   } on FirebaseAuthException catch (e) {
-    // ✅ Better error handling for Firebase Auth errors
+    // user-friendly error messages pag tanga yung user input or may ibang auth issues
     String message;
     switch (e.code) {
       case 'user-not-found':
@@ -322,7 +322,7 @@ static Future<BackendResult> registerUserForApproval({
   static Stream<QuerySnapshot> userApprovalNotifications() {
     return _firestore
         .collection('events')
-        .where('createdBy', isEqualTo: _auth.currentUser!.uid) // will be posted once account approval system in admin is implemented
+        .where('createdBy', isEqualTo: _auth.currentUser!.uid) 
         .where('approved', isEqualTo: true)
         .snapshots();
   }
@@ -330,7 +330,6 @@ static Future<BackendResult> registerUserForApproval({
   /// ========================================================
   /// EVENT ATTENDANCE
   /// ========================================================
-  // will be tested once event attendance system is implemented in calendar page and account approval system in admin is implemented
   static Future<BackendResult> attendEvent({
     required CalendarEvent event,
     required DateTime date,
