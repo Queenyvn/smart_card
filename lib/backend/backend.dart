@@ -120,7 +120,7 @@ static Future<BackendResult> registerUserForApproval({
   /// ========================================================
   /// SUBMIT EVENT (USER → ADMIN APPROVAL)
   /// ========================================================
-  static Future<void> submitEventForApproval({
+  static Future<String> submitEventForApproval({
     required String title,
     required String venue,
     required String description,
@@ -131,23 +131,29 @@ static Future<BackendResult> registerUserForApproval({
     required int availableSlots,
   }) async {
     final user = _auth.currentUser;
-    if (user == null) throw Exception('User not logged in');
+    if (user == null) {
+      throw Exception('User not logged in');
+    }
 
-    await _firestore.collection('events').add({
-      'title': title,
-      'venue': venue,
-      'description': description,
-      'date': Timestamp.fromDate(date),
+    final normalizedDate = DateTime(date.year, date.month, date.day);
+
+    final docRef = await _firestore.collection('events').add({
+      'title': title.trim(),
+      'venue': venue.trim(),
+      'description': description.trim(),
+      'imageUrl': posterUrl,
+      'date': Timestamp.fromDate(normalizedDate),
       'startHour': start.hour,
       'startMinute': start.minute,
       'endHour': end.hour,
       'endMinute': end.minute,
-      'imageUrl': posterUrl,
       'approved': false,
       'createdBy': user.uid,
       'createdAt': FieldValue.serverTimestamp(),
       'availableSlots': availableSlots,
     });
+
+    return docRef.id;
   }
 
   /// ========================================================

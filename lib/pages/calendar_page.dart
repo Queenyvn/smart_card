@@ -208,6 +208,16 @@ class _CalendarPageState extends State<CalendarPage> {
                 availableSlots: availableSlots,
               );
 
+              // ✅ CLEAR FORM STATE HERE
+              _titleCtrl.clear();
+              _venueCtrl.clear();
+              _descCtrl.clear();
+              _posterUrlCtrl.clear();
+              _eventDate = null;
+              _startTime = null;
+              _endTime = null;
+
+              // Close dialog
               Navigator.pop(context);
 
               ScaffoldMessenger.of(context).showSnackBar(
