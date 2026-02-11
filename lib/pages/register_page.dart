@@ -12,6 +12,7 @@ class _RegisterPageState extends State<RegisterPage> {
   final _formKey = GlobalKey<FormState>();
   final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _addressController = TextEditingController();
   final TextEditingController _businessNameController = TextEditingController();
   final TextEditingController _businessNatureController = TextEditingController();
@@ -25,6 +26,7 @@ class _RegisterPageState extends State<RegisterPage> {
   void dispose() {
     _usernameController.dispose();
     _emailController.dispose();
+    _passwordController.dispose();
     _addressController.dispose();
     _businessNameController.dispose();
     _businessNatureController.dispose();
@@ -44,6 +46,7 @@ class _RegisterPageState extends State<RegisterPage> {
       await BackendService.registerUserForApproval(
         username: _usernameController.text.trim(),
         email: _emailController.text.trim(),
+        password: _passwordController.text.trim(),
         address: _addressController.text.trim(),
         userType: userType,
         businessName: userType == 'Business' ? _businessNameController.text.trim() : null,
@@ -87,6 +90,15 @@ class _RegisterPageState extends State<RegisterPage> {
                 controller: _emailController,
                 decoration: const InputDecoration(labelText: 'Email'),
                 validator: (value) => value!.isEmpty ? 'Required' : null,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _passwordController,
+                decoration: const InputDecoration(labelText: 'Password'),
+                obscureText: true,
+                validator: (value) => 
+                value == null || value.length < 6
+                ? 'Password must be at least 6 characters' : null,
               ),
               const SizedBox(height: 12),
               TextFormField(

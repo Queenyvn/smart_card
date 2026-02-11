@@ -68,22 +68,99 @@ static List<CalendarEvent> getEventsForDay(DateTime day) {
 static Future<BackendResult> login({
   required String username,
   required String password,
-}) async { // DEV MODE LOGIN
+}) async {
+  // DEV MODE LOGIN
   if (kDebugMode) {
     if (username == 'dev' && password == 'dev') {
       await Future.delayed(const Duration(milliseconds: 500));
       return BackendResult(success: true);
     }
-    return BackendResult(success: false, message: 'DEV MODE: user username: dev, password: dev');
-  } // end of DEV MODE LOGIN
+    return BackendResult(success: false, message: 'DEV MODE: use username: dev, password: dev');
+  }
+  
   try {
-    await _auth.signInWithEmailAndPassword(
-      email: username,
-      password: password,
+    String emailToUse = username.trim();
+    
+    // If username doesn't contain @, look it up in Firestore
+    if (!username.contains('@')) {
+      final querySnapshot = await _firestore
+          .collection('users')
+          .where('username', isEqualTo: username.trim())
+          .limit(1)
+          .get();
+      
+      if (querySnapshot.docs.isEmpty) {
+        return BackendResult(
+          success: false,
+          message: "Username not found.",
+        );
+      }
+      
+      emailToUse = querySnapshot.docs.first.data()['email'];
+    }
+    
+    // Authenticate with Firebase
+    final userCredential = await _auth.signInWithEmailAndPassword(
+      email: emailToUse,
+      password: password.trim(),
     );
+
+    // Check if user document exists in Firestore
+    final userDoc = await _firestore
+        .collection('users')
+        .doc(userCredential.user!.uid)
+        .get();
+
+    // ✅ FIX: Check if document exists first
+    if (!userDoc.exists) {
+      await _auth.signOut();
+      return BackendResult(
+        success: false,
+        message: "User profile not found. Please contact administrator.",
+      );
+    }
+
+    // ✅ FIX: Safely get the approved field with null check
+    final userData = userDoc.data();
+    if (userData == null || userData['approved'] != true) {
+      await _auth.signOut();
+      return BackendResult(
+        success: false,
+        message: "Account not yet approved by admin.",
+      );
+    }
+
     return BackendResult(success: true);
+    
+  } on FirebaseAuthException catch (e) {
+    // ✅ Better error handling for Firebase Auth errors
+    String message;
+    switch (e.code) {
+      case 'user-not-found':
+        message = "No account found with this email.";
+        break;
+      case 'wrong-password':
+        message = "Incorrect password.";
+        break;
+      case 'invalid-email':
+        message = "Invalid email format.";
+        break;
+      case 'user-disabled':
+        message = "This account has been disabled.";
+        break;
+      case 'invalid-credential':
+        message = "Invalid email or password.";
+        break;
+      default:
+        message = "Login failed: ${e.message}";
+    }
+    return BackendResult(success: false, message: message);
+    
   } catch (e) {
-    return BackendResult(success: false, message: 'Login failed: ${e.toString()}');
+    return BackendResult(
+      success: false,
+      message: "An error occurred: ${e.toString()}",
+    );
   }
 }
 
@@ -93,27 +170,74 @@ static Future<BackendResult> login({
 static Future<BackendResult> registerUserForApproval({
   required String username,
   required String email,
+  required String password,
   required String address,
-  required String userType, // user will choose whether they are registering as a business owner or a professional
+  required String userType,
   String? businessName,
   String? businessNature,
   String? professionalTitle,
 }) async {
   try {
-    await _firestore.collection('pending_users').add({
-      'username': username,
-      'email': email,
-      'address': address,
+    // Check if username already exists
+    final usernameCheck = await _firestore
+        .collection('users')
+        .where('username', isEqualTo: username.trim())
+        .limit(1)
+        .get();
+    
+    if (usernameCheck.docs.isNotEmpty) {
+      return BackendResult(
+        success: false,
+        message: "Username already taken. Please choose another.",
+      );
+    }
+
+    // Create Firebase Authentication account
+    final userCredential = await _auth.createUserWithEmailAndPassword(
+      email: email.trim(),
+      password: password.trim(),
+    );
+
+    // Save user info in Firestore with approved = false
+    await _firestore
+        .collection('users')
+        .doc(userCredential.user!.uid)
+        .set({
+      'username': username.trim(),
+      'email': email.trim(),
+      'address': address.trim(),
       'userType': userType,
-      'businessName': businessName,
-      'businessNature': businessNature,
-      'professionalTitle': professionalTitle,
+      'businessName': businessName?.trim(),
+      'businessNature': businessNature?.trim(),
+      'professionalTitle': professionalTitle?.trim(),
       'approved': false,
       'createdAt': FieldValue.serverTimestamp(),
     });
+
     return BackendResult(success: true);
+    
+  } on FirebaseAuthException catch (e) {
+    String message;
+    switch (e.code) {
+      case 'email-already-in-use':
+        message = "This email is already registered.";
+        break;
+      case 'invalid-email':
+        message = "Invalid email format.";
+        break;
+      case 'weak-password':
+        message = "Password is too weak.";
+        break;
+      default:
+        message = "Registration failed: ${e.message}";
+    }
+    return BackendResult(success: false, message: message);
+    
   } catch (e) {
-    return BackendResult(success: false, message: e.toString());
+    return BackendResult(
+      success: false,
+      message: "An error occurred: ${e.toString()}",
+    );
   }
 }
 

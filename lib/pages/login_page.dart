@@ -11,7 +11,7 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
-  final TextEditingController _usernameController = TextEditingController();
+  final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
 
   bool _rememberMe = false;
@@ -21,13 +21,13 @@ class _LoginPageState extends State<LoginPage> {
 
   @override
   void dispose() {
-    _usernameController.dispose();
+    _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
 
   /// ===============================
-  /// UI → BACKEND HANDOFF ONLY
+  /// UI toBACKEND HANDOFF ONLY
   /// ===============================
   Future<void> _loginUser() async {
     setState(() {
@@ -36,7 +36,7 @@ class _LoginPageState extends State<LoginPage> {
     });
 
     final result = await BackendService.login(
-      username: _usernameController.text.trim(),
+      username: _emailController.text.trim(),
       password: _passwordController.text.trim(),
     );
 
@@ -82,13 +82,13 @@ class _LoginPageState extends State<LoginPage> {
 
               // Username / Email
               TextField(
-                controller: _usernameController,
+                controller: _emailController,
                 decoration: InputDecoration(
-                  labelText: "Username",
+                  labelText: "Email",
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  prefixIcon: const Icon(Icons.person),
+                  prefixIcon: const Icon(Icons.email),
                 ),
               ),
               const SizedBox(height: 20),
