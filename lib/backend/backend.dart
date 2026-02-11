@@ -118,7 +118,7 @@ static Future<BackendResult> registerUserForApproval({
 
 
   /// ========================================================
-  /// SUBMIT EVENT (USER → ADMIN APPROVAL)
+  /// SUBMIT EVENT (USER to ADMIN APPROVAL)
   /// ========================================================
   static Future<String> submitEventForApproval({
     required String title,
