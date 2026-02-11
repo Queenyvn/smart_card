@@ -61,10 +61,6 @@ static List<CalendarEvent> getEventsForDay(DateTime day) {
   return [];
 }
 
-
-
-
-
 // =========================================================
 // LOGIN
 // =========================================================
@@ -98,7 +94,7 @@ static Future<BackendResult> registerUserForApproval({
   required String username,
   required String email,
   required String address,
-  required String userType, // "business" or "professional"
+  required String userType, // user will choose whether they are registering as a business owner or a professional
   String? businessName,
   String? businessNature,
   String? professionalTitle,
@@ -202,7 +198,7 @@ static Future<BackendResult> registerUserForApproval({
   static Stream<QuerySnapshot> userApprovalNotifications() {
     return _firestore
         .collection('events')
-        .where('createdBy', isEqualTo: _auth.currentUser!.uid)
+        .where('createdBy', isEqualTo: _auth.currentUser!.uid) // will be posted once account approval system in admin is implemented
         .where('approved', isEqualTo: true)
         .snapshots();
   }
@@ -210,6 +206,7 @@ static Future<BackendResult> registerUserForApproval({
   /// ========================================================
   /// EVENT ATTENDANCE
   /// ========================================================
+  // will be tested once event attendance system is implemented in calendar page and account approval system in admin is implemented
   static Future<BackendResult> attendEvent({
     required CalendarEvent event,
     required DateTime date,
