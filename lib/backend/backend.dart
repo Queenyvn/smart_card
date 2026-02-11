@@ -56,9 +56,14 @@ class BackendService {
   static final FirebaseAuth _auth = FirebaseAuth.instance;
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   
+  
 static List<CalendarEvent> getEventsForDay(DateTime day) {
   return [];
 }
+
+
+
+
 
 // =========================================================
 // LOGIN
@@ -132,7 +137,7 @@ static Future<BackendResult> registerUserForApproval({
   }) async {
     final user = _auth.currentUser;
     if (user == null) {
-      throw Exception('User not logged in');
+      throw Exception('User not logged in'); // an accoxnt must be logged in to submit an event
     }
 
     final normalizedDate = DateTime(date.year, date.month, date.day);
@@ -162,7 +167,7 @@ static Future<BackendResult> registerUserForApproval({
   static Stream<List<UpcomingEvent>> approvedEventsStream() {
     return _firestore
         .collection('events')
-        .where('approved', isEqualTo: true)
+        .where('approved', isEqualTo: true) // filter only approved events 
         .snapshots()
         .map((snapshot) {
       return snapshot.docs.map((doc) {
@@ -224,6 +229,47 @@ static Future<BackendResult> registerUserForApproval({
       return BackendResult(success: false, message: e.toString());
     }
   }
+
+
+  // ========================================================
+  // PROFILE METHODS
+  // ========================================================
+  static Future<Map<String, dynamic>?> fetchUserProfile() async {
+    final user = _auth.currentUser;
+    if (user == null) return null;
+
+    final doc = await _firestore.collection('users').doc(user.uid).get();
+    if (!doc.exists) return null;
+
+    return doc.data();
+  }
+
+  static Future<BackendResult> saveUserProfile({
+    required String name,
+    required String phone,
+    required String address,
+    Map<String, dynamic>? location,
+    List<Map<String, dynamic>>? businesses,
+  }) async {
+    try {
+      final user = _auth.currentUser;
+      if (user == null) throw Exception('User not logged in');
+
+      await _firestore.collection('users').doc(user.uid).set({
+        'name': name.trim(),
+        'phone': phone.trim(),
+        'address': address.trim(),
+        'location': location,
+        'updatedAt': FieldValue.serverTimestamp(),
+        'status': 'pending',
+        'businesses': businesses,
+      }, SetOptions(merge: true));
+
+      return BackendResult(success: true);
+    } catch (e) {
+      return BackendResult(success: false, message: e.toString());
+    }
+  }  
 }
 
 

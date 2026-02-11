@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
 
-
 class UserProfilePage extends StatefulWidget {
   const UserProfilePage({super.key});
 
@@ -37,7 +36,7 @@ class Business {
 class _UserProfilePageState extends State<UserProfilePage> {
   bool isEditing = false;
   File? profileImage;
-  
+
   final ImagePicker _picker = ImagePicker();
 
   final nameController = TextEditingController(text: "Mary Jane Araco");
@@ -74,9 +73,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
   }
 
   Future<void> pickProfileImage() async {
-    final XFile? pickedFile =
-        await _picker.pickImage(source: ImageSource.gallery);
-
+    final XFile? pickedFile = await _picker.pickImage(source: ImageSource.gallery);
     if (pickedFile != null) {
       setState(() {
         profileImage = File(pickedFile.path);
@@ -86,10 +83,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
 
   Future<void> addBusinessImage(Business business) async {
     if (business.images.length >= 5) return;
-
-    final XFile? file =
-        await _picker.pickImage(source: ImageSource.gallery);
-
+    final XFile? file = await _picker.pickImage(source: ImageSource.gallery);
     if (file != null) {
       setState(() {
         business.images.add(File(file.path));
@@ -98,9 +92,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
   }
 
   Widget businessImages(Business business) {
-    if (!isEditing && business.images.isEmpty) {
-      return const SizedBox.shrink();
-    }
+    if (!isEditing && business.images.isEmpty) return const SizedBox.shrink();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -142,7 +134,6 @@ class _UserProfilePageState extends State<UserProfilePage> {
                     ),
                 ],
               ),
-
             if (isEditing && business.images.length < 5)
               GestureDetector(
                 onTap: () => addBusinessImage(business),
@@ -169,9 +160,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
     int maxLines = 1,
     bool required = false,
   }) {
-    if (!isEditing && controller.text.isEmpty) {
-      return const SizedBox.shrink();
-    }
+    if (!isEditing && controller.text.isEmpty) return const SizedBox.shrink();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -198,10 +187,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
 
   Widget businessSection(int index) {
     final business = businesses[index];
-
-    if (!isEditing && business.isEmpty) {
-      return const SizedBox.shrink();
-    }
+    if (!isEditing && business.isEmpty) return const SizedBox.shrink();
 
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
@@ -232,26 +218,11 @@ class _UserProfilePageState extends State<UserProfilePage> {
               ],
             ),
             const SizedBox(height: 8),
-
-            labeledField(
-              label: "Business Name",
-              controller: business.name,
-            ),
+            labeledField(label: "Business Name", controller: business.name),
             businessImages(business),
-            labeledField(
-              label: "Business Description",
-              controller: business.desc,
-              maxLines: 3,
-            ),
-            labeledField(
-              label: "Business Address",
-              controller: business.address,
-              maxLines: 2,
-            ),
-            labeledField(
-              label: "Business Contact Number",
-              controller: business.phone,
-            ),
+            labeledField(label: "Business Description", controller: business.desc, maxLines: 3),
+            labeledField(label: "Business Address", controller: business.address, maxLines: 2),
+            labeledField(label: "Business Contact Number", controller: business.phone),
           ],
         ),
       ),
@@ -297,8 +268,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
                       radius: 45,
                       backgroundImage: profileImage != null
                           ? FileImage(profileImage!)
-                          : const AssetImage("assets/profile.jpg")
-                              as ImageProvider,
+                          : const AssetImage("assets/profile.jpg") as ImageProvider,
                     ),
                     if (isEditing)
                       Container(
@@ -320,28 +290,11 @@ class _UserProfilePageState extends State<UserProfilePage> {
             const SizedBox(height: 24),
 
             /// PERSONAL INFO
-            labeledField(
-              label: "Name",
-              controller: nameController,
-              required: true,
-            ),
-            labeledField(
-              label: "Role",
-              controller: roleController,
-            ),
-            labeledField(
-              label: "Personal Email",
-              controller: emailController,
-            ),
-            labeledField(
-              label: "Personal Phone Number",
-              controller: phoneController,
-            ),
-            labeledField(
-              label: "Personal Address",
-              controller: addressController,
-              maxLines: 2,
-            ),
+            labeledField(label: "Name", controller: nameController, required: true),
+            labeledField(label: "Role", controller: roleController),
+            labeledField(label: "Personal Email", controller: emailController),
+            labeledField(label: "Personal Phone Number", controller: phoneController),
+            labeledField(label: "Personal Address", controller: addressController, maxLines: 2),
 
             const SizedBox(height: 16),
 
@@ -351,9 +304,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 8),
-
-            for (int i = 0; i < businesses.length; i++)
-              businessSection(i),
+            for (int i = 0; i < businesses.length; i++) businessSection(i),
 
             if (isEditing)
               OutlinedButton.icon(
