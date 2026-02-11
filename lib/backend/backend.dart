@@ -83,7 +83,7 @@ static Future<BackendResult> login({
     );
     return BackendResult(success: true);
   } catch (e) {
-    return BackendResult(success: false, message: e.toString());
+    return BackendResult(success: false, message: 'Login failed: ${e.toString()}');
   }
 }
 
