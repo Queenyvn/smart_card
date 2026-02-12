@@ -208,7 +208,7 @@ class _CalendarPageState extends State<CalendarPage> {
                 availableSlots: availableSlots,
               );
 
-              // ✅ CLEAR FORM STATE HERE
+              //  CLEAR FORM STATE HERE
               _titleCtrl.clear();
               _venueCtrl.clear();
               _descCtrl.clear();
@@ -339,7 +339,7 @@ class _CalendarPageState extends State<CalendarPage> {
         ),
       ),
       floatingActionButton: FloatingActionButton(
-        backgroundColor: cbocPrimary,
+        backgroundColor: cbocAccent,
         onPressed: _openAddEventDialog,
         child: const Icon(Icons.add),
       ),

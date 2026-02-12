@@ -1,12 +1,12 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../backend/backend.dart';
 
+// CBOC Branding Colors
 const Color cbocPrimary = Color(0xFFB71C1C);
+const Color cbocSecondary = Color(0xFFD32F2F);
+const Color cbocAccent = Color(0xFFFFCDD2);
 
 class Business {
   final TextEditingController name;
@@ -16,13 +16,13 @@ class Business {
   final List<Uint8List> images;
   Uint8List? logoBytes;
 
-
   Business({
     required this.name,
     required this.desc,
     required this.address,
     required this.phone,
     List<Uint8List>? images,
+    this.logoBytes,
   }) : images = images ?? [];
 
   bool get isEmpty =>
@@ -42,19 +42,19 @@ class EditProfilePage extends StatefulWidget {
 }
 
 class _EditProfilePageState extends State<EditProfilePage> {
-  final _formKey = GlobalKey<FormState>();
   final ImagePicker _picker = ImagePicker();
 
-  bool isEditing = true;
+  bool _isLoading = false;
   bool _isSaving = false;
-  Uint8List? profileImageBytes;
+  Uint8List? profileImage;
 
-  final _nameController = TextEditingController();
-  final _phoneController = TextEditingController();
-  final _addressController = TextEditingController();
+  final nameController = TextEditingController();
+  final roleController = TextEditingController();
+  final emailController = TextEditingController();
+  final phoneController = TextEditingController();
+  final addressController = TextEditingController();
+
   final List<Business> businesses = [];
-
-  LatLng? _pinnedLocation;
 
   @override
   void initState() {
@@ -64,10 +64,12 @@ class _EditProfilePageState extends State<EditProfilePage> {
 
   @override
   void dispose() {
-    _nameController.dispose();
-    _phoneController.dispose();
-    _addressController.dispose();
-    for (var b in businesses) {
+    nameController.dispose();
+    roleController.dispose();
+    emailController.dispose();
+    phoneController.dispose();
+    addressController.dispose();
+    for (final b in businesses) {
       b.name.dispose();
       b.desc.dispose();
       b.address.dispose();
@@ -77,196 +79,183 @@ class _EditProfilePageState extends State<EditProfilePage> {
   }
 
   /// ===============================
-  /// LOAD USER PROFILE
+  /// LOAD USER PROFILE FROM BACKEND
   /// ===============================
   Future<void> _loadUserProfile() async {
-    final data = await BackendService.fetchUserProfile(); // CHANGED
-    if (data == null) return;
+    setState(() => _isLoading = true);
 
-    setState(() {
-      _nameController.text = data['name'] ?? '';
-      _phoneController.text = data['phone'] ?? '';
-      _addressController.text = data['address'] ?? '';
+    final data = await BackendService.fetchUserProfile();
 
-      if (data['location'] != null) {
-        _pinnedLocation = LatLng(
-          data['location']['lat'],
-          data['location']['lng'],
-        );
-      }
+    if (data != null) {
+      setState(() {
+        nameController.text = data['username'] ?? '';
+        emailController.text = data['email'] ?? '';
+        phoneController.text = data['phone'] ?? '';
+        addressController.text = data['address'] ?? '';
+        roleController.text = data['userType'] ?? '';
 
-      if (data['businesses'] != null) {
-        for (var b in data['businesses']) {
-          businesses.add(
-            Business(
-              name: TextEditingController(text: b['name'] ?? ''),
-              desc: TextEditingController(text: b['desc'] ?? ''),
-              address: TextEditingController(text: b['address'] ?? ''),
-              phone: TextEditingController(text: b['phone'] ?? ''),
-            ),
-          );
+        // Load businesses if they exist
+        if (data['businesses'] != null && data['businesses'] is List) {
+          businesses.clear();
+          for (var b in data['businesses']) {
+            businesses.add(
+              Business(
+                name: TextEditingController(text: b['name'] ?? ''),
+                desc: TextEditingController(text: b['desc'] ?? ''),
+                address: TextEditingController(text: b['address'] ?? ''),
+                phone: TextEditingController(text: b['phone'] ?? ''),
+              ),
+            );
+          }
         }
-      }
-    });
-  }
-
-
-  /// ===============================
-  /// PICK PROFILE IMAGE
-  /// ===============================
-  Future<void> pickProfileImage() async {
-    final XFile? file = await _picker.pickImage(source: ImageSource.gallery);
-    if (file != null) {
-      final bytes = await file.readAsBytes();
-      setState(() => profileImageBytes = bytes);
+      });
     }
+
+    setState(() => _isLoading = false);
   }
 
   /// ===============================
-  /// PICK BUSINESS IMAGE
-  /// ===============================
-  Future<void> addBusinessImage(Business business) async {
-    if (business.images.length >= 5) return;
-    final XFile? file = await _picker.pickImage(source: ImageSource.gallery);
-    if (file != null) {
-      final bytes = await file.readAsBytes();
-      setState(() => business.images.add(bytes));
-    }
-  }
-
-  Widget businessImages(Business business) {
-    if (!isEditing && business.images.isEmpty) return const SizedBox.shrink();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text("Business Images", style: TextStyle(fontWeight: FontWeight.w600)),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            for (int i = 0; i < business.images.length; i++)
-              Stack(
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: Image.memory(
-                      business.images[i],
-                      width: 80,
-                      height: 80,
-                      fit: BoxFit.cover,
-                    ),
-                  ),
-                  if (isEditing)
-                    Positioned(
-                      top: -6,
-                      right: -6,
-                      child: IconButton(
-                        icon: const Icon(Icons.close, size: 18),
-                        color: Colors.red,
-                        onPressed: () {
-                          setState(() => business.images.removeAt(i));
-                        },
-                      ),
-                    ),
-                ],
-              ),
-            if (isEditing && business.images.length < 5)
-              GestureDetector(
-                onTap: () => addBusinessImage(business),
-                child: Container(
-                  width: 80,
-                  height: 80,
-                  decoration: BoxDecoration(
-                    border: Border.all(color: Colors.grey),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Icon(Icons.add_a_photo),
-                ),
-              ),
-          ],
-        ),
-        const SizedBox(height: 16),
-      ],
-    );
-  }
-
-  /// ========================================================
-  /// BUSINESS LOGO
-  /// ========================================================
-  Future<void> pickBusinessLogo(Business business) async {
-  final XFile? file = await _picker.pickImage(source: ImageSource.gallery);
-  if (file != null) {
-    final bytes = await file.readAsBytes();
-    setState(() => business.logoBytes = bytes);
-  }
-}
-
-  /// ===============================
-  /// SAVE PROFILE
+  /// SAVE PROFILE TO BACKEND
   /// ===============================
   Future<void> _saveProfile() async {
-    if (!_formKey.currentState!.validate()) return;
-
     setState(() => _isSaving = true);
 
+    // Prepare businesses data
     final businessesData = businesses.map((b) {
       return {
         'name': b.name.text.trim(),
         'desc': b.desc.text.trim(),
         'address': b.address.text.trim(),
         'phone': b.phone.text.trim(),
-        'logo': b.logoBytes != null ? b.logoBytes : null,
+        'logo': b.logoBytes,
       };
     }).toList();
 
+    // Save to backend
     final result = await BackendService.saveUserProfile(
-      name: _nameController.text,
-      phone: _phoneController.text,
-      address: _addressController.text,
-      location: _pinnedLocation == null
-          ? null
-          : {'lat': _pinnedLocation!.latitude, 'lng': _pinnedLocation!.longitude},
+      name: nameController.text.trim(),
+      phone: phoneController.text.trim(),
+      address: addressController.text.trim(),
+      location: null,
       businesses: businessesData,
     );
 
     setState(() => _isSaving = false);
 
-    if (mounted) {
+    if (!mounted) return;
+
+    if (result.success) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(result.success ? 'Profile updated successfully' : result.message ?? 'Error')),
+        const SnackBar(
+          content: Text('Profile saved successfully!'),
+          backgroundColor: cbocPrimary,
+        ),
+      );
+      Navigator.pop(context); // Go back after saving
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error: ${result.message}'),
+          backgroundColor: cbocSecondary,
+        ),
       );
     }
   }
 
+  /// ===============================
+  /// IMAGE PICKERS
+  /// ===============================
+  Future<void> pickProfileImage() async {
+    final XFile? pickedFile =
+        await _picker.pickImage(source: ImageSource.gallery);
+    if (pickedFile != null) {
+      final bytes = await pickedFile.readAsBytes();
+      setState(() {
+        profileImage = bytes;
+      });
+    }
+  }
+
+  Future<void> addBusinessImage(Business business) async {
+    if (business.images.length >= 5) return;
+    final XFile? file = await _picker.pickImage(source: ImageSource.gallery);
+    if (file != null) {
+      final bytes = await file.readAsBytes();
+      setState(() {
+        business.images.add(bytes);
+      });
+    }
+  }
+
+  Future<void> pickBusinessLogo(Business business) async {
+    final XFile? file = await _picker.pickImage(source: ImageSource.gallery);
+    if (file != null) {
+      final bytes = await file.readAsBytes();
+      setState(() {
+        business.logoBytes = bytes;
+      });
+    }
+  }
 
   /// ===============================
-  /// MAP SECTION
+  /// UI WIDGETS
   /// ===============================
-  Widget _buildMapSection() {
-    return SizedBox(
-      height: 250,
-      child: GoogleMap(
-        initialCameraPosition: CameraPosition(
-          target: _pinnedLocation ?? const LatLng(14.4748, 120.9240),
-          zoom: 15,
+  Widget businessLogo(Business business) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          "Business Logo",
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
         ),
-        mapType: MapType.normal,
-        markers: _pinnedLocation == null
-            ? {}
-            : {
-                Marker(
-                  markerId: const MarkerId('business_location'),
-                  position: _pinnedLocation!,
-                  draggable: true,
-                  onDragEnd: (pos) => setState(() => _pinnedLocation = pos),
-                ),
-              },
-        onTap: (pos) => setState(() => _pinnedLocation = pos),
-        myLocationButtonEnabled: true,
-        zoomControlsEnabled: true,
-      ),
+        const SizedBox(height: 8),
+        GestureDetector(
+          onTap: () => pickBusinessLogo(business),
+          child: Container(
+            width: 100,
+            height: 100,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.grey),
+            ),
+            child: business.logoBytes != null
+                ? ClipOval(
+                    child: Image.memory(
+                      business.logoBytes!,
+                      fit: BoxFit.cover,
+                    ),
+                  )
+                : const Icon(Icons.add_a_photo, size: 40),
+          ),
+        ),
+        const SizedBox(height: 16),
+      ],
+    );
+  }
+
+  Widget businessImages(Business business) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          "Business Images",
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+        ),
+        const SizedBox(height: 8),
+        GestureDetector(
+          onTap: () => addBusinessImage(business),
+          child: Container(
+            width: 100,
+            height: 100,
+            decoration: BoxDecoration(
+              border: Border.all(color: Colors.grey),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Icon(Icons.add_a_photo, size: 40),
+          ),
+        ),
+        const SizedBox(height: 16),
+      ],
     );
   }
 
@@ -275,17 +264,28 @@ class _EditProfilePageState extends State<EditProfilePage> {
     required TextEditingController controller,
     int maxLines = 1,
     bool required = false,
+    bool readOnly = false,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(required ? "$label (Required)" : label, style: const TextStyle(fontWeight: FontWeight.w600)),
-        const SizedBox(height: 4),
-        TextFormField(
+        Text(
+          required ? "$label (Required)" : label,
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+        ),
+        const SizedBox(height: 8),
+        TextField(
           controller: controller,
           maxLines: maxLines,
-          decoration: const InputDecoration(border: OutlineInputBorder(), isDense: true),
-          validator: required ? (v) => v == null || v.isEmpty ? 'Required' : null : null,
+          readOnly: readOnly,
+          decoration: InputDecoration(
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+            contentPadding: const EdgeInsets.all(16),
+            filled: readOnly,
+            fillColor: readOnly ? Colors.grey[100] : null,
+          ),
         ),
         const SizedBox(height: 16),
       ],
@@ -294,121 +294,253 @@ class _EditProfilePageState extends State<EditProfilePage> {
 
   Widget businessSection(int index) {
     final business = businesses[index];
+
     return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(color: Colors.grey[300]!),
+      ),
       margin: const EdgeInsets.only(bottom: 16),
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                Text("Business ${index + 1}", style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                const Spacer(),
-                IconButton(
-                  icon: const Icon(Icons.delete, color: Colors.red),
-                  onPressed: () => setState(() => businesses.removeAt(index)),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            labeledField(label: "Business Name", controller: business.name),
-            businessImages(business),
-            // Business Logo Picker
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text("Business Logo", style: TextStyle(fontWeight: FontWeight.w600)),
-                const SizedBox(height: 8),
-                GestureDetector(
-                  onTap: () => pickBusinessLogo(business),
-                  child: CircleAvatar(
-                    radius: 35,
-                    backgroundImage: business.logoBytes != null
-                        ? MemoryImage(business.logoBytes!)
-                        : const AssetImage("assets/logo_placeholder.png") as ImageProvider,
-                    child: business.logoBytes == null
-                        ? const Icon(Icons.add_a_photo, color: Colors.white)
-                        : null,
+                Text(
+                  "Business ${index + 1}",
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
-                const SizedBox(height: 16),
+                const Spacer(),
+                IconButton(
+                  icon: const Icon(Icons.delete, color: cbocSecondary),
+                  onPressed: () {
+                    setState(() {
+                      businesses.removeAt(index);
+                    });
+                  },
+                ),
               ],
             ),
-            labeledField(label: "Business Description", controller: business.desc, maxLines: 3),
-            labeledField(label: "Business Address", controller: business.address, maxLines: 2),
-            labeledField(label: "Business Phone", controller: business.phone),
+            const SizedBox(height: 16),
+            labeledField(label: "Business Name", controller: business.name),
+            businessLogo(business),
+            businessImages(business),
+            labeledField(
+                label: "Business Description",
+                controller: business.desc,
+                maxLines: 4),
+            labeledField(
+                label: "Business Address",
+                controller: business.address,
+                maxLines: 3),
+            labeledField(
+                label: "Business Contact Number", controller: business.phone),
           ],
         ),
       ),
     );
   }
 
+  void cancelEdit() {
+    Navigator.pop(context);
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return Scaffold(
+        appBar: AppBar(
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back, color: Colors.white),
+            onPressed: () => Navigator.pop(context),
+          ),
+          title: const Text(
+            "Profile",
+            style: TextStyle(color: Colors.white),
+          ),
+          centerTitle: true,
+          backgroundColor: cbocPrimary,
+          elevation: 0,
+        ),
+        body: const Center(
+          child: CircularProgressIndicator(color: cbocPrimary),
+        ),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: cbocPrimary,
-        title: const Text('Edit Profile'),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: const Text(
+          "Profile",
+          style: TextStyle(color: Colors.white),
+        ),
         centerTitle: true,
+        backgroundColor: cbocPrimary,
+        elevation: 0,
       ),
+      backgroundColor: Colors.white,
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            children: [
-              Center(
-                child: GestureDetector(
-                  onTap: pickProfileImage,
-                  child: Stack(
-                    alignment: Alignment.bottomRight,
-                    children: [
-                      CircleAvatar(
-                        radius: 45,
-                        backgroundImage: profileImageBytes != null
-                            ? MemoryImage(profileImageBytes!)
-                            : const AssetImage("assets/profile.jpg") as ImageProvider,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Profile Image
+            Center(
+              child: GestureDetector(
+                onTap: pickProfileImage,
+                child: Stack(
+                  alignment: Alignment.bottomRight,
+                  children: [
+                    CircleAvatar(
+                      radius: 50,
+                      backgroundImage: profileImage != null
+                          ? MemoryImage(profileImage!)
+                          : const AssetImage("assets/profile.jpg")
+                              as ImageProvider,
+                    ),
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: const BoxDecoration(
+                        color: Colors.black54,
+                        shape: BoxShape.circle,
                       ),
-                      Container(
-                        padding: const EdgeInsets.all(6),
-                        decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
-                        child: const Icon(Icons.camera_alt, size: 18, color: Colors.white),
+                      child: const Icon(
+                        Icons.camera_alt,
+                        size: 20,
+                        color: Colors.white,
                       ),
-                    ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 32),
+
+            /// PERSONAL INFO
+            labeledField(
+                label: "Name", controller: nameController, required: true),
+            labeledField(label: "Role", controller: roleController),
+            labeledField(
+                label: "Personal Email",
+                controller: emailController,
+                readOnly: true),
+            labeledField(
+                label: "Personal Phone Number", controller: phoneController),
+            labeledField(
+                label: "Personal Address",
+                controller: addressController,
+                maxLines: 3),
+
+            const SizedBox(height: 24),
+
+            /// BUSINESSES SECTION
+            const Text(
+              "Businesses",
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 16),
+
+            for (int i = 0; i < businesses.length; i++) businessSection(i),
+
+            // Add Business Button
+            OutlinedButton.icon(
+              icon: const Icon(Icons.add, color: cbocSecondary),
+              label: const Text(
+                "Add Business",
+                style: TextStyle(color: cbocSecondary),
+              ),
+              style: OutlinedButton.styleFrom(
+                side: const BorderSide(color: cbocSecondary),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              ),
+              onPressed: () {
+                setState(() {
+                  businesses.add(
+                    Business(
+                      name: TextEditingController(),
+                      desc: TextEditingController(),
+                      address: TextEditingController(),
+                      phone: TextEditingController(),
+                    ),
+                  );
+                });
+              },
+            ),
+
+            const SizedBox(height: 32),
+
+            // Cancel and Save Buttons
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: _isSaving ? null : cancelEdit,
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: cbocSecondary),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(24),
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                    ),
+                    child: const Text(
+                      "Cancel",
+                      style: TextStyle(
+                        color: cbocSecondary,
+                        fontSize: 16,
+                      ),
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 24),
-              labeledField(label: "Full Name", controller: _nameController, required: true),
-              labeledField(label: "Phone Number", controller: _phoneController),
-              labeledField(label: "Address", controller: _addressController),
-              const SizedBox(height: 16),
-              Text("Businesses", style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 8),
-              for (int i = 0; i < businesses.length; i++) businessSection(i),
-              OutlinedButton.icon(
-                icon: const Icon(Icons.add),
-                label: const Text("Add Business"),
-                onPressed: () => setState(() => businesses.add(Business(name: TextEditingController(), desc: TextEditingController(), address: TextEditingController(), phone: TextEditingController()))),
-              ),
-              const SizedBox(height: 20),
-              Align(alignment: Alignment.centerLeft, child: Text('Business Location (Tap to pin)', style: Theme.of(context).textTheme.titleMedium)),
-              const SizedBox(height: 10),
-              _buildMapSection(),
-              const SizedBox(height: 30),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: cbocPrimary, padding: const EdgeInsets.symmetric(vertical: 14)),
-                  onPressed: _isSaving ? null : _saveProfile,
-                  child: _isSaving
-                      ? const CircularProgressIndicator(color: Colors.white)
-                      : const Text('Save Profile'),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: _isSaving ? null : _saveProfile,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: cbocAccent,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(24),
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                    ),
+                    child: _isSaving
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor:
+                                  AlwaysStoppedAnimation<Color>(Colors.white),
+                            ),
+                          )
+                        : const Text(
+                            "Save",
+                            style: TextStyle(
+                              fontSize: 16,
+                              color: cbocSecondary,
+                            ),
+                          ),
+                  ),
                 ),
-              ),
-            ],
-          ),
+              ],
+            ),
+            const SizedBox(height: 32),
+          ],
         ),
       ),
     );
