@@ -2,6 +2,9 @@ import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'dart:typed_data';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 
 /// ========================================================
 /// GENERIC RESULT MODEL
@@ -133,7 +136,6 @@ static Future<BackendResult> login({
     return BackendResult(success: true);
     
   } on FirebaseAuthException catch (e) {
-    // user-friendly error messages pag tanga yung user input or may ibang auth issues
     String message;
     switch (e.code) {
       case 'user-not-found':
@@ -176,6 +178,8 @@ static Future<BackendResult> registerUserForApproval({
   String? businessName,
   String? businessNature,
   String? professionalTitle,
+  Uint8List? dtiFileBytes,
+  String? dtiFileName,
 }) async {
   try {
     // Check if username already exists
@@ -198,6 +202,22 @@ static Future<BackendResult> registerUserForApproval({
       password: password.trim(),
     );
 
+    String? dtiUrl;
+    
+    // Upload DTI document to Cloudinary if provided
+    if (dtiFileBytes != null && dtiFileName != null) {
+      try {
+        dtiUrl = await _uploadToCloudinary(dtiFileBytes, dtiFileName);
+      } catch (e) {
+        // If upload fails, delete the created user and return error
+        await userCredential.user!.delete();
+        return BackendResult(
+          success: false,
+          message: "Failed to upload DTI document: ${e.toString()}",
+        );
+      }
+    }
+
     // Save user info in Firestore with approved = false
     await _firestore
         .collection('users')
@@ -210,6 +230,8 @@ static Future<BackendResult> registerUserForApproval({
       'businessName': businessName?.trim(),
       'businessNature': businessNature?.trim(),
       'professionalTitle': professionalTitle?.trim(),
+      'dtiDocumentUrl': dtiUrl,
+      'dtiFileName': dtiFileName,
       'approved': false,
       'createdAt': FieldValue.serverTimestamp(),
     });
@@ -389,7 +411,39 @@ static Future<BackendResult> registerUserForApproval({
     } catch (e) {
       return BackendResult(success: false, message: e.toString());
     }
-  }  
+  }
+
+  // ========================================================
+  // CLOUDINARY UPLOAD HELPER
+  // ========================================================
+  static Future<String> _uploadToCloudinary(Uint8List fileBytes, String fileName) async {
+    // Replace these with your actual Cloudinary credentials
+    const cloudName = 'Ydfwe9loex';
+    const uploadPreset = 'smartcard';
+    
+    final url = Uri.parse('https://api.cloudinary.com/v1_1/$cloudName/raw/upload');
+    
+    final request = http.MultipartRequest('POST', url);
+    request.fields['upload_preset'] = uploadPreset;
+    request.fields['folder'] = 'dti_documents';
+    
+    request.files.add(
+      http.MultipartFile.fromBytes(
+        'file',
+        fileBytes,
+        filename: fileName,
+      ),
+    );
+    
+    final response = await request.send();
+    
+    if (response.statusCode == 200) {
+      final responseData = await response.stream.toBytes();
+      final responseString = String.fromCharCodes(responseData);
+      final jsonMap = json.decode(responseString);
+      return jsonMap['secure_url'];
+    } else {
+      throw Exception('Cloudinary upload failed with status: ${response.statusCode}');
+    }
+  }
 }
-
-
