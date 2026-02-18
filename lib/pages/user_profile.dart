@@ -1,6 +1,38 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'dart:io';
 import 'package:image_picker/image_picker.dart';
+import '../backend/backend.dart';
+
+// CBOC Branding Colors
+const Color cbocPrimary = Color(0xFFB71C1C);
+const Color cbocSecondary = Color(0xFFD32F2F);
+const Color cbocAccent = Color(0xFFFFCDD2);
+
+class Business {
+  final TextEditingController name;
+  final TextEditingController desc;
+  final TextEditingController address;
+  final TextEditingController phone;
+  final TextEditingController locationLink;
+  final List<Uint8List> images;
+
+  Business({
+    required this.name,
+    required this.desc,
+    required this.address,
+    required this.phone,
+    required this.locationLink,
+    List<Uint8List>? images,
+  }) : images = images ?? [];
+
+  bool get isEmpty =>
+      name.text.isEmpty &&
+      desc.text.isEmpty &&
+      address.text.isEmpty &&
+      phone.text.isEmpty &&
+      locationLink.text.isEmpty &&
+      images.isEmpty;
+}
 
 class UserProfilePage extends StatefulWidget {
   const UserProfilePage({super.key});
@@ -9,52 +41,27 @@ class UserProfilePage extends StatefulWidget {
   State<UserProfilePage> createState() => _UserProfilePageState();
 }
 
-class Business {
-  final TextEditingController name;
-  final TextEditingController desc;
-  final TextEditingController address;
-  final TextEditingController phone;
-  final List<File> images;
-  final ImagePicker _picker = ImagePicker();
-
-  Business({
-    required this.name,
-    required this.desc,
-    required this.address,
-    required this.phone,
-    List<File>? images,
-  }) : images = images ?? [];
-
-  bool get isEmpty =>
-      name.text.isEmpty &&
-      desc.text.isEmpty &&
-      address.text.isEmpty &&
-      phone.text.isEmpty &&
-      images.isEmpty;
-}
-
 class _UserProfilePageState extends State<UserProfilePage> {
-  bool isEditing = false;
-  File? profileImage;
-
   final ImagePicker _picker = ImagePicker();
 
-  final nameController = TextEditingController(text: "Mary Jane Araco");
-  final roleController = TextEditingController(text: "Perfume Business Owner");
-  final emailController = TextEditingController(text: "maryjane@email.com");
+  bool isEditing = false;
+  bool _isLoading = false;
+  bool _isSaving = false;
+  Uint8List? profileImage;
+
+  final nameController = TextEditingController();
+  final roleController = TextEditingController();
+  final emailController = TextEditingController();
   final phoneController = TextEditingController();
   final addressController = TextEditingController();
 
-  final List<Business> businesses = [
-    Business(
-      name: TextEditingController(text: "Perfume de Acre"),
-      desc: TextEditingController(
-        text: "A perfume company focused on designing distinctive, long-lasting fragrances.",
-      ),
-      address: TextEditingController(),
-      phone: TextEditingController(),
-    ),
-  ];
+  final List<Business> businesses = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserProfile();
+  }
 
   @override
   void dispose() {
@@ -68,15 +75,107 @@ class _UserProfilePageState extends State<UserProfilePage> {
       b.desc.dispose();
       b.address.dispose();
       b.phone.dispose();
+      b.locationLink.dispose();
     }
     super.dispose();
   }
 
+  /// ===============================
+  /// LOAD USER PROFILE FROM BACKEND
+  /// ===============================
+  Future<void> _loadUserProfile() async {
+    setState(() => _isLoading = true);
+
+    final data = await BackendService.fetchUserProfile();
+
+    if (data != null) {
+      setState(() {
+        nameController.text = data['name'] ?? '';
+        emailController.text = data['email'] ?? '';
+        phoneController.text = data['phone'] ?? '';
+        addressController.text = data['address'] ?? '';
+        roleController.text = data['userType'] ?? '';
+
+        // Load businesses if they exist
+        if (data['businesses'] != null && data['businesses'] is List) {
+          businesses.clear();
+          for (var b in data['businesses']) {
+            businesses.add(
+              Business(
+                name: TextEditingController(text: b['name'] ?? ''),
+                desc: TextEditingController(text: b['desc'] ?? ''),
+                address: TextEditingController(text: b['address'] ?? ''),
+                phone: TextEditingController(text: b['phone'] ?? ''),
+                locationLink: TextEditingController(text: b['locationLink'] ?? ''),
+              ),
+            );
+          }
+        }
+      });
+    }
+
+    setState(() => _isLoading = false);
+  }
+
+  /// ===============================
+  /// SAVE PROFILE TO BACKEND
+  /// ===============================
+  Future<void> _saveProfile() async {
+    setState(() => _isSaving = true);
+
+    // Prepare businesses data
+    final businessesData = businesses.map((b) {
+      return {
+        'name': b.name.text.trim(),
+        'desc': b.desc.text.trim(),
+        'address': b.address.text.trim(),
+        'phone': b.phone.text.trim(),
+        'locationLink': b.locationLink.text.trim(),
+      };
+    }).toList();
+
+    // Save to backend
+    final result = await BackendService.saveUserProfile(
+      name: nameController.text.trim(),
+      phone: phoneController.text.trim(),
+      address: addressController.text.trim(),
+      location: null,
+      businesses: businessesData,
+    );
+
+    setState(() => _isSaving = false);
+
+    if (!mounted) return;
+
+    if (result.success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Profile saved successfully!'),
+          backgroundColor: Colors.green[700],
+        ),
+      );
+      setState(() {
+        isEditing = false;
+      });
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error: ${result.message}'),
+          backgroundColor: Colors.red[700],
+        ),
+      );
+    }
+  }
+
+  /// ===============================
+  /// IMAGE PICKERS
+  /// ===============================
   Future<void> pickProfileImage() async {
     final XFile? pickedFile = await _picker.pickImage(source: ImageSource.gallery);
     if (pickedFile != null) {
+      final bytes = await pickedFile.readAsBytes();
       setState(() {
-        profileImage = File(pickedFile.path);
+        profileImage = bytes;
       });
     }
   }
@@ -85,12 +184,16 @@ class _UserProfilePageState extends State<UserProfilePage> {
     if (business.images.length >= 5) return;
     final XFile? file = await _picker.pickImage(source: ImageSource.gallery);
     if (file != null) {
+      final bytes = await file.readAsBytes();
       setState(() {
-        business.images.add(File(file.path));
+        business.images.add(bytes);
       });
     }
   }
 
+  /// ===============================
+  /// UI WIDGETS
+  /// ===============================
   Widget businessImages(Business business) {
     if (!isEditing && business.images.isEmpty) return const SizedBox.shrink();
 
@@ -111,7 +214,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
                 children: [
                   ClipRRect(
                     borderRadius: BorderRadius.circular(8),
-                    child: Image.file(
+                    child: Image.memory(
                       business.images[i],
                       width: 80,
                       height: 80,
@@ -159,6 +262,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
     required TextEditingController controller,
     int maxLines = 1,
     bool required = false,
+    bool readOnly = false,
   }) {
     if (!isEditing && controller.text.isEmpty) return const SizedBox.shrink();
 
@@ -174,12 +278,18 @@ class _UserProfilePageState extends State<UserProfilePage> {
             ? TextField(
                 controller: controller,
                 maxLines: maxLines,
-                decoration: const InputDecoration(
-                  border: OutlineInputBorder(),
+                readOnly: readOnly,
+                decoration: InputDecoration(
+                  border: const OutlineInputBorder(),
                   isDense: true,
+                  filled: readOnly,
+                  fillColor: readOnly ? Colors.grey[100] : null,
                 ),
               )
-            : Text(controller.text),
+            : Text(
+                controller.text,
+                style: const TextStyle(fontSize: 16),
+              ),
         const SizedBox(height: 16),
       ],
     );
@@ -222,6 +332,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
             businessImages(business),
             labeledField(label: "Business Description", controller: business.desc, maxLines: 3),
             labeledField(label: "Business Address", controller: business.address, maxLines: 2),
+            labeledField(label: "Business Location Link", controller: business.locationLink),
             labeledField(label: "Business Contact Number", controller: business.phone),
           ],
         ),
@@ -230,6 +341,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
   }
 
   void cancelEdit() {
+    _loadUserProfile();
     setState(() {
       isEditing = false;
     });
@@ -237,6 +349,18 @@ class _UserProfilePageState extends State<UserProfilePage> {
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text("Profile"),
+          centerTitle: true,
+        ),
+        body: const Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: const Text("Profile"),
@@ -267,7 +391,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
                     CircleAvatar(
                       radius: 45,
                       backgroundImage: profileImage != null
-                          ? FileImage(profileImage!)
+                          ? MemoryImage(profileImage!)
                           : const AssetImage("assets/profile.jpg") as ImageProvider,
                     ),
                     if (isEditing)
@@ -292,7 +416,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
             /// PERSONAL INFO
             labeledField(label: "Name", controller: nameController, required: true),
             labeledField(label: "Role", controller: roleController),
-            labeledField(label: "Personal Email", controller: emailController),
+            labeledField(label: "Personal Email", controller: emailController, readOnly: true),
             labeledField(label: "Personal Phone Number", controller: phoneController),
             labeledField(label: "Personal Address", controller: addressController, maxLines: 2),
 
@@ -318,6 +442,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
                         desc: TextEditingController(),
                         address: TextEditingController(),
                         phone: TextEditingController(),
+                        locationLink: TextEditingController(),
                       ),
                     );
                   });
@@ -330,20 +455,24 @@ class _UserProfilePageState extends State<UserProfilePage> {
                 children: [
                   Expanded(
                     child: OutlinedButton(
-                      onPressed: cancelEdit,
+                      onPressed: _isSaving ? null : cancelEdit,
                       child: const Text("Cancel"),
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: ElevatedButton(
-                      onPressed: () {
-                        setState(() {
-                          isEditing = false;
-                        });
-                        debugPrint("Profile saved");
-                      },
-                      child: const Text("Save"),
+                      onPressed: _isSaving ? null : _saveProfile,
+                      child: _isSaving
+                          ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                              ),
+                            )
+                          : const Text("Save"),
                     ),
                   ),
                 ],

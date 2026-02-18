@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'edit_profile.dart';
 
 // Import placeholder pages
 import 'announcement_page.dart';
@@ -54,30 +53,6 @@ class _MenuPageState extends State<MenuPage> {
                         style: TextStyle(
                           fontSize: 17,
                           fontWeight: FontWeight.bold,
-                        ),
-                      ),
-
-                      //  Edit Profile link with hover effect
-                      MouseRegion(
-                        onEnter: (_) => setState(() => _isHovering = true),
-                        onExit: (_) => setState(() => _isHovering = false),
-                        child: GestureDetector(
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const EditProfilePage(),
-                              ),
-                            );
-                          },
-                          child: Text(
-                            "Edit Profile",
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: _isHovering ? Colors.red : Colors.grey,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
                         ),
                       ),
                     ],
