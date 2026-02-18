@@ -13,6 +13,7 @@ class Business {
   final TextEditingController desc;
   final TextEditingController address;
   final TextEditingController phone;
+  final TextEditingController locationLink;
   final List<Uint8List> images;
   Uint8List? logoBytes;
 
@@ -21,6 +22,7 @@ class Business {
     required this.desc,
     required this.address,
     required this.phone,
+    required this.locationLink,
     List<Uint8List>? images,
     this.logoBytes,
   }) : images = images ?? [];
@@ -30,6 +32,7 @@ class Business {
       desc.text.isEmpty &&
       address.text.isEmpty &&
       phone.text.isEmpty &&
+      locationLink.text.isEmpty &&
       images.isEmpty &&
       logoBytes == null;
 }
@@ -74,6 +77,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
       b.desc.dispose();
       b.address.dispose();
       b.phone.dispose();
+      b.locationLink.dispose();
     }
     super.dispose();
   }
@@ -104,6 +108,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
                 desc: TextEditingController(text: b['desc'] ?? ''),
                 address: TextEditingController(text: b['address'] ?? ''),
                 phone: TextEditingController(text: b['phone'] ?? ''),
+                locationLink: TextEditingController(text: b['locationLink'] ?? ''),
               ),
             );
           }
@@ -127,6 +132,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
         'desc': b.desc.text.trim(),
         'address': b.address.text.trim(),
         'phone': b.phone.text.trim(),
+        'locationLink': b.locationLink.text.trim(),
         'logo': b.logoBytes,
       };
     }).toList();
@@ -340,6 +346,9 @@ class _EditProfilePageState extends State<EditProfilePage> {
                 controller: business.address,
                 maxLines: 3),
             labeledField(
+                label: "Business Location Link (url)", 
+                controller: business.locationLink),
+            labeledField(
                 label: "Business Contact Number", controller: business.phone),
           ],
         ),
@@ -475,6 +484,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
                       desc: TextEditingController(),
                       address: TextEditingController(),
                       phone: TextEditingController(),
+                      locationLink: TextEditingController(),
                     ),
                   );
                 });
@@ -510,7 +520,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
                   child: ElevatedButton(
                     onPressed: _isSaving ? null : _saveProfile,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: cbocAccent,
+                      backgroundColor: cbocSecondary,
                       foregroundColor: Colors.white,
                       elevation: 0,
                       shape: RoundedRectangleBorder(
@@ -530,10 +540,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
                           )
                         : const Text(
                             "Save",
-                            style: TextStyle(
-                              fontSize: 16,
-                              color: cbocSecondary,
-                            ),
+                            style: TextStyle(fontSize: 16),
                           ),
                   ),
                 ),
