@@ -8,6 +8,7 @@ import 'e_portfolio_page.dart';
 import 'qr_code_page.dart';
 import 'analytics_page.dart';
 import 'scanner_page.dart'; 
+import '../backend/backend.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -19,70 +20,85 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   bool _isHovering = false;
   int _selectedIndex = 0;
-  
+  String _userName = "Loading...";
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserName();
+  }
+
+  Future<void> _loadUserName() async {
+    final profile = await BackendService.fetchUserProfile();
+    if (profile != null && mounted) {
+      setState(() {
+        _userName = profile['name'] ?? profile['username'] ?? "User";
+      });
+    }
+  }
+
   /// Mutuals List below the recently interacted carousel
-Widget _mutualsList() {
-  final List<Map<String, String>> mutuals = [
-    {
-      'name': 'Dr. Olivia Wilson',
-      'title': 'Consultant - Physiotherapy',
-      'img': 'assets/profile.jpg',
-    },
-    {
-      'name': 'Jonathan Patterson',
-      'title': 'Consultant - Internal Medicine',
-      'img': 'assets/profile.jpg',
-    },
-    {
-      'name': 'Athala Odiver',
-      'title': 'Marketing Specialist',
-      'img': 'assets/profile.jpg',
-    },
-  ];
+  Widget _mutualsList() {
+    final List<Map<String, String>> mutuals = [
+      {
+        'name': 'Dr. Olivia Wilson',
+        'title': 'Consultant - Physiotherapy',
+        'img': 'assets/profile.jpg',
+      },
+      {
+        'name': 'Jonathan Patterson',
+        'title': 'Consultant - Internal Medicine',
+        'img': 'assets/profile.jpg',
+      },
+      {
+        'name': 'Athala Odiver',
+        'title': 'Marketing Specialist',
+        'img': 'assets/profile.jpg',
+      },
+    ];
 
-  return Column(
-    children: mutuals.map((person) {
-      return Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: Colors.grey.shade100,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Row(
-          children: [
-            CircleAvatar(
-              radius: 26,
-              backgroundImage: AssetImage(person['img']!),
-            ),
-            const SizedBox(width: 12),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  person['name']!,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
+    return Column(
+      children: mutuals.map((person) {
+        return Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade100,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            children: [
+              CircleAvatar(
+                radius: 26,
+                backgroundImage: AssetImage(person['img']!),
+              ),
+              const SizedBox(width: 12),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    person['name']!,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  person['title']!,
-                  style: const TextStyle(
-                    color: Colors.grey,
-                    fontSize: 12,
+                  const SizedBox(height: 2),
+                  Text(
+                    person['title']!,
+                    style: const TextStyle(
+                      color: Colors.grey,
+                      fontSize: 12,
+                    ),
                   ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      );
-    }).toList(),
-  );
-}
-
+                ],
+              ),
+            ],
+          ),
+        );
+      }).toList(),
+    );
+  }
 
   // Handle navigation when tapping bottom nav items
   void _onItemTapped(int index) {
@@ -149,8 +165,8 @@ Widget _mutualsList() {
                           const Text("Welcome",
                               style: TextStyle(
                                   fontSize: 16, fontWeight: FontWeight.bold)),
-                          const Text("Mary Jane Araco",
-                              style: TextStyle(
+                          Text(_userName,
+                              style: const TextStyle(
                                   fontSize: 14, fontWeight: FontWeight.w500)),
                           // View Profile button with hover effect
                           MouseRegion(
@@ -205,7 +221,7 @@ Widget _mutualsList() {
               ),
               const SizedBox(height: 20),
 
-              /// 📊 DASHBOARD
+              /// DASHBOARD
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -272,9 +288,9 @@ Widget _mutualsList() {
               const SizedBox(height: 24),
               const Text("Mutuals",
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 12),
+              const SizedBox(height: 12),
 
-                  _mutualsList(),
+              _mutualsList(),
             ],
           ),
         ),
