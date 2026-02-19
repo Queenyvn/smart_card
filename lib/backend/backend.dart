@@ -41,18 +41,22 @@ class CalendarEvent {
 class UpcomingEvent {
   final DateTime date;
   final CalendarEvent event;
-  UpcomingEvent({required this.date, required this.event});
+  final int availableSlots;
+  UpcomingEvent({
+    required this.date,
+    required this.event,
+    required this.availableSlots,
+  });
 }
 
 /// ========================================================
-/// BUSINESS PIN MODEL — used by the map widget
-/// Each business inside a user's `businesses` array becomes one pin
+/// BUSINESS PIN MODEL
 /// ========================================================
 class BusinessPin {
   final String uid;
-  final String name;          // owner's name
-  final String businessName;  // the business name
-  final String userType;      // e.g. "Business Owner"
+  final String name;
+  final String businessName;
+  final String userType;
   final String email;
   final String phone;
   final double lat;
@@ -73,6 +77,53 @@ class BusinessPin {
     required this.address,
     this.logoUrl,
     this.businessDesc = '',
+  });
+}
+
+// =========================================================
+// POST MODEL
+// =========================================================
+class Post {
+  final String id;
+  final String uid;
+  final String authorName;
+  final String? authorLogoUrl;
+  final String content;
+  final String? imageUrl;
+  final int likesCount;
+  final bool likedByMe;
+  final DateTime createdAt;
+  final List<PostComment> comments;
+  final bool isRepost;
+  final Post? originalPost;
+
+  Post({
+    required this.id,
+    required this.uid,
+    required this.authorName,
+    this.authorLogoUrl,
+    required this.content,
+    this.imageUrl,
+    required this.likesCount,
+    required this.likedByMe,
+    required this.createdAt,
+    required this.comments,
+    this.isRepost = false,
+    this.originalPost,
+  });
+}
+
+class PostComment {
+  final String uid;
+  final String authorName;
+  final String content;
+  final DateTime createdAt;
+
+  PostComment({
+    required this.uid,
+    required this.authorName,
+    required this.content,
+    required this.createdAt,
   });
 }
 
@@ -167,7 +218,8 @@ class BackendService {
       }
       return BackendResult(success: false, message: message);
     } catch (e) {
-      return BackendResult(success: false, message: "An error occurred: ${e.toString()}");
+      return BackendResult(
+          success: false, message: "An error occurred: ${e.toString()}");
     }
   }
 
@@ -216,7 +268,10 @@ class BackendService {
         }
       }
 
-      await _firestore.collection('users').doc(userCredential.user!.uid).set({
+      await _firestore
+          .collection('users')
+          .doc(userCredential.user!.uid)
+          .set({
         'username': username.trim(),
         'email': email.trim(),
         'address': address.trim(),
@@ -248,7 +303,8 @@ class BackendService {
       }
       return BackendResult(success: false, message: message);
     } catch (e) {
-      return BackendResult(success: false, message: "An error occurred: ${e.toString()}");
+      return BackendResult(
+          success: false, message: "An error occurred: ${e.toString()}");
     }
   }
 
@@ -303,12 +359,14 @@ class BackendService {
         final date = (d['date'] as Timestamp).toDate();
         return UpcomingEvent(
           date: date,
+          availableSlots: (d['availableSlots'] as num?)?.toInt() ?? 0,
           event: CalendarEvent(
             title: d['title'],
             venue: d['venue'],
             description: d['description'],
             imageUrl: d['imageUrl'],
-            startTime: TimeOfDay(hour: d['startHour'], minute: d['startMinute']),
+            startTime:
+                TimeOfDay(hour: d['startHour'], minute: d['startMinute']),
             endTime: TimeOfDay(hour: d['endHour'], minute: d['endMinute']),
             approved: true,
           ),
@@ -388,7 +446,7 @@ class BackendService {
   }
 
   // =========================================================
-  // SAVE BUSINESS LOCATION (top-level, for backward compat)
+  // SAVE BUSINESS LOCATION
   // =========================================================
   static Future<BackendResult> saveBusinessLocation({
     required double lat,
@@ -414,7 +472,6 @@ class BackendService {
 
   // =========================================================
   // FETCH CAVITE BUSINESS PINS
-  // Reads from businesses[] array (new) with top-level location fallback (old)
   // =========================================================
   static Future<List<BusinessPin>> fetchCaviteBusinessPins() async {
     const double minLat = 14.10;
@@ -433,7 +490,6 @@ class BackendService {
       final data = doc.data();
       bool addedFromBusinesses = false;
 
-      // ── PRIMARY: Read each business in businesses[] array ──
       final businesses = data['businesses'];
       if (businesses != null && businesses is List) {
         for (final b in businesses) {
@@ -442,8 +498,9 @@ class BackendService {
           final lat = (b['lat'] as num?)?.toDouble();
           final lng = (b['lng'] as num?)?.toDouble();
           if (lat == null || lng == null) continue;
-          if (lat < minLat || lat > maxLat ||
-              lng < minLng || lng > maxLng) continue;
+          if (lat < minLat || lat > maxLat || lng < minLng || lng > maxLng) {
+            continue;
+          }
 
           final businessName = (b['name'] as String?)?.isNotEmpty == true
               ? b['name'] as String
@@ -480,15 +537,17 @@ class BackendService {
         }
       }
 
-      // ── FALLBACK: top-level location field (old data structure) ──
       if (!addedFromBusinesses) {
         final loc = data['location'];
         if (loc is Map) {
           final lat = (loc['lat'] as num?)?.toDouble();
           final lng = (loc['lng'] as num?)?.toDouble();
-          if (lat != null && lng != null &&
-              lat >= minLat && lat <= maxLat &&
-              lng >= minLng && lng <= maxLng) {
+          if (lat != null &&
+              lng != null &&
+              lat >= minLat &&
+              lat <= maxLat &&
+              lng >= minLng &&
+              lng <= maxLng) {
             pins.add(BusinessPin(
               uid: doc.id,
               name: data['name'] as String? ?? '',
@@ -517,14 +576,11 @@ class BackendService {
   // =========================================================
   // UPLOAD LOGO
   // =========================================================
-  static Future<String?> uploadLogoImage(Uint8List bytes, String fileName) async {
+  static Future<String?> uploadLogoImage(
+      Uint8List bytes, String fileName) async {
     try {
-      return await _uploadToCloudinary(
-        bytes,
-        fileName,
-        folder: 'business_logos',
-        resourceType: 'image',
-      );
+      return await _uploadToCloudinary(bytes, fileName,
+          folder: 'business_logos', resourceType: 'image');
     } catch (e) {
       return null;
     }
@@ -562,6 +618,283 @@ class BackendService {
     } else {
       throw Exception(
           'Cloudinary upload failed with status: ${response.statusCode}');
+    }
+  }
+
+  // =========================================================
+  // CREATE POST
+  // =========================================================
+  static Future<BackendResult> createPost({
+    required String content,
+    String? imageUrl,
+  }) async {
+    try {
+      final user = _auth.currentUser;
+      if (user == null) throw Exception('Not logged in');
+
+      final profile = await fetchUserProfile();
+      final name = profile?['name'] ?? profile?['username'] ?? 'User';
+      final logoUrl = profile?['logoUrl'];
+
+      await _firestore.collection('posts').add({
+        'uid': user.uid,
+        'authorName': name,
+        'authorLogoUrl': logoUrl,
+        'content': content.trim(),
+        'imageUrl': imageUrl,
+        'likesCount': 0,
+        'likedBy': [],
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      return BackendResult(success: true);
+    } catch (e) {
+      return BackendResult(success: false, message: e.toString());
+    }
+  }
+
+  // =========================================================
+  // FEED STREAM
+  // =========================================================
+  static Stream<List<Post>> feedStream() {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) return Stream.value([]);
+
+    return _firestore
+        .collection('posts')
+        .orderBy('createdAt', descending: true)
+        .limit(50)
+        .snapshots()
+        .asyncMap((snapshot) async {
+      final followDoc =
+          await _firestore.collection('follows').doc(uid).get();
+      final following =
+          List<String>.from(followDoc.data()?['following'] ?? []);
+      final allowed = {...following, uid};
+
+      final posts = <Post>[];
+      for (final doc in snapshot.docs) {
+        final d = doc.data();
+        if (!allowed.contains(d['uid'])) continue;
+
+        final commentsSnap = await doc.reference
+            .collection('comments')
+            .orderBy('createdAt')
+            .get();
+
+        final comments = commentsSnap.docs.map((c) {
+          final cd = c.data();
+          return PostComment(
+            uid: cd['uid'],
+            authorName: cd['authorName'],
+            content: cd['content'],
+            createdAt: (cd['createdAt'] as Timestamp?)?.toDate() ??
+                DateTime.now(),
+          );
+        }).toList();
+
+        Post? originalPost;
+        if (d['isRepost'] == true && d['originalPostId'] != null) {
+          originalPost = Post(
+            id: d['originalPostId'],
+            uid: d['originalUid'] ?? '',
+            authorName: d['originalAuthorName'] ?? '',
+            authorLogoUrl: d['originalAuthorLogoUrl'],
+            content: d['originalContent'] ?? '',
+            imageUrl: d['originalImageUrl'],
+            likesCount: 0,
+            likedByMe: false,
+            createdAt: (d['originalCreatedAt'] as Timestamp?)?.toDate() ??
+                DateTime.now(),
+            comments: [],
+          );
+        }
+
+        posts.add(Post(
+          id: doc.id,
+          uid: d['uid'],
+          authorName: d['authorName'] ?? '',
+          authorLogoUrl: d['authorLogoUrl'],
+          content: d['content'] ?? '',
+          imageUrl: d['imageUrl'],
+          likesCount: d['likesCount'] ?? 0,
+          likedByMe: (d['likedBy'] as List?)?.contains(uid) ?? false,
+          createdAt:
+              (d['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+          comments: comments,
+          isRepost: d['isRepost'] == true,
+          originalPost: originalPost,
+        ));
+      }
+      return posts;
+    });
+  }
+
+  // =========================================================
+  // TOGGLE LIKE
+  // =========================================================
+  static Future<void> toggleLike(String postId, bool currentlyLiked) async {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) return;
+
+    final ref = _firestore.collection('posts').doc(postId);
+    if (currentlyLiked) {
+      await ref.update({
+        'likedBy': FieldValue.arrayRemove([uid]),
+        'likesCount': FieldValue.increment(-1),
+      });
+    } else {
+      await ref.update({
+        'likedBy': FieldValue.arrayUnion([uid]),
+        'likesCount': FieldValue.increment(1),
+      });
+    }
+  }
+
+  // =========================================================
+  // ADD COMMENT
+  // =========================================================
+  static Future<BackendResult> addComment({
+    required String postId,
+    required String content,
+  }) async {
+    try {
+      final uid = _auth.currentUser?.uid;
+      if (uid == null) throw Exception('Not logged in');
+      final profile = await fetchUserProfile();
+      final name = profile?['name'] ?? profile?['username'] ?? 'User';
+
+      await _firestore
+          .collection('posts')
+          .doc(postId)
+          .collection('comments')
+          .add({
+        'uid': uid,
+        'authorName': name,
+        'content': content.trim(),
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      return BackendResult(success: true);
+    } catch (e) {
+      return BackendResult(success: false, message: e.toString());
+    }
+  }
+
+  // =========================================================
+  // FOLLOW / UNFOLLOW
+  // =========================================================
+  static Future<void> followUser(String targetUid) async {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) return;
+    await _firestore.collection('follows').doc(uid).set({
+      'following': FieldValue.arrayUnion([targetUid]),
+    }, SetOptions(merge: true));
+  }
+
+  static Future<void> unfollowUser(String targetUid) async {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) return;
+    await _firestore.collection('follows').doc(uid).set({
+      'following': FieldValue.arrayRemove([targetUid]),
+    }, SetOptions(merge: true));
+  }
+
+  // =========================================================
+  // IS FOLLOWING CHECK
+  // =========================================================
+  static Future<bool> isFollowing(String targetUid) async {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) return false;
+    try {
+      final doc =
+          await _firestore.collection('follows').doc(uid).get();
+      final following =
+          List<String>.from(doc.data()?['following'] ?? []);
+      return following.contains(targetUid);
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // =========================================================
+  // UPLOAD POST IMAGE
+  // =========================================================
+  static Future<String?> uploadPostImage(
+      Uint8List bytes, String fileName) async {
+    try {
+      return await _uploadToCloudinary(bytes, fileName,
+          folder: 'post_images', resourceType: 'image');
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // =========================================================
+  // FETCH POST LIKERS
+  // =========================================================
+  static Future<List<Map<String, dynamic>>> fetchPostLikers(
+      String postId) async {
+    try {
+      final doc =
+          await _firestore.collection('posts').doc(postId).get();
+      if (!doc.exists) return [];
+
+      final likedBy =
+          List<String>.from(doc.data()?['likedBy'] ?? []);
+      if (likedBy.isEmpty) return [];
+
+      final List<Map<String, dynamic>> likers = [];
+      for (final uid in likedBy) {
+        final userDoc =
+            await _firestore.collection('users').doc(uid).get();
+        if (userDoc.exists) {
+          likers.add({...userDoc.data()!, 'uid': uid});
+        }
+      }
+      return likers;
+    } catch (e) {
+      return [];
+    }
+  }
+
+  // =========================================================
+  // REPOST
+  // =========================================================
+  static Future<BackendResult> repostPost({
+    required Post originalPost,
+    String caption = '',
+  }) async {
+    try {
+      final user = _auth.currentUser;
+      if (user == null) throw Exception('Not logged in');
+
+      final profile = await fetchUserProfile();
+      final name = profile?['name'] ?? profile?['username'] ?? 'User';
+      final logoUrl = profile?['logoUrl'];
+
+      await _firestore.collection('posts').add({
+        'uid': user.uid,
+        'authorName': name,
+        'authorLogoUrl': logoUrl,
+        'content': caption,
+        'imageUrl': null,
+        'likesCount': 0,
+        'likedBy': [],
+        'isRepost': true,
+        'originalPostId': originalPost.id,
+        'originalUid': originalPost.uid,
+        'originalAuthorName': originalPost.authorName,
+        'originalAuthorLogoUrl': originalPost.authorLogoUrl,
+        'originalContent': originalPost.content,
+        'originalImageUrl': originalPost.imageUrl,
+        'originalCreatedAt': Timestamp.fromDate(originalPost.createdAt),
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      return BackendResult(success: true);
+    } catch (e) {
+      return BackendResult(success: false, message: e.toString());
     }
   }
 }
