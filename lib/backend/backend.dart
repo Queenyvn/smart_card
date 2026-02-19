@@ -12,11 +12,8 @@ import 'dart:convert';
 class BackendResult {
   final bool success;
   final String? message;
-
   BackendResult({required this.success, this.message});
 }
-
-
 
 /// ========================================================
 /// CALENDAR MODELS
@@ -44,13 +41,40 @@ class CalendarEvent {
 class UpcomingEvent {
   final DateTime date;
   final CalendarEvent event;
-
   UpcomingEvent({required this.date, required this.event});
 }
 
+/// ========================================================
+/// BUSINESS PIN MODEL — used by the map widget
+/// Each business inside a user's `businesses` array becomes one pin
+/// ========================================================
+class BusinessPin {
+  final String uid;
+  final String name;          // owner's name
+  final String businessName;  // the business name
+  final String userType;      // e.g. "Business Owner"
+  final String email;
+  final String phone;
+  final double lat;
+  final double lng;
+  final String address;
+  final String? logoUrl;
+  final String businessDesc;
 
-
-
+  BusinessPin({
+    required this.uid,
+    required this.name,
+    required this.businessName,
+    required this.userType,
+    required this.email,
+    required this.phone,
+    required this.lat,
+    required this.lng,
+    required this.address,
+    this.logoUrl,
+    this.businessDesc = '',
+  });
+}
 
 /// ========================================================
 /// CENTRAL BACKEND SERVICE
@@ -58,215 +82,179 @@ class UpcomingEvent {
 class BackendService {
   static final FirebaseAuth _auth = FirebaseAuth.instance;
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  
-  
-static List<CalendarEvent> getEventsForDay(DateTime day) {
-  return [];
-}
 
-// =========================================================
-// LOGIN
-// =========================================================
+  static List<CalendarEvent> getEventsForDay(DateTime day) => [];
 
-static Future<BackendResult> login({
-  required String username,
-  required String password,
-}) async {
-  // DEV MODE LOGIN
-  if (kDebugMode) {
-    if (username == 'dev' && password == 'dev') {
-      await Future.delayed(const Duration(milliseconds: 500));
-      return BackendResult(success: true);
+  // =========================================================
+  // LOGIN
+  // =========================================================
+  static Future<BackendResult> login({
+    required String username,
+    required String password,
+  }) async {
+    if (kDebugMode) {
+      if (username == 'dev' && password == 'dev') {
+        await Future.delayed(const Duration(milliseconds: 500));
+        return BackendResult(success: true);
+      }
+      return BackendResult(
+          success: false,
+          message: 'DEV MODE: use username: dev, password: dev');
     }
-    return BackendResult(success: false, message: 'DEV MODE: use username: dev, password: dev');
+
+    try {
+      String emailToUse = username.trim();
+
+      if (!username.contains('@')) {
+        final querySnapshot = await _firestore
+            .collection('users')
+            .where('username', isEqualTo: username.trim())
+            .limit(1)
+            .get();
+
+        if (querySnapshot.docs.isEmpty) {
+          return BackendResult(success: false, message: "Username not found.");
+        }
+        emailToUse = querySnapshot.docs.first.data()['email'];
+      }
+
+      final userCredential = await _auth.signInWithEmailAndPassword(
+        email: emailToUse,
+        password: password.trim(),
+      );
+
+      final userDoc = await _firestore
+          .collection('users')
+          .doc(userCredential.user!.uid)
+          .get();
+
+      if (!userDoc.exists) {
+        await _auth.signOut();
+        return BackendResult(
+          success: false,
+          message: "User profile not found. Please contact administrator.",
+        );
+      }
+
+      final userData = userDoc.data();
+      if (userData == null || userData['approved'] != true) {
+        await _auth.signOut();
+        return BackendResult(
+            success: false, message: "Account not yet approved by admin.");
+      }
+
+      return BackendResult(success: true);
+    } on FirebaseAuthException catch (e) {
+      String message;
+      switch (e.code) {
+        case 'user-not-found':
+          message = "No account found with this email.";
+          break;
+        case 'wrong-password':
+          message = "Incorrect password.";
+          break;
+        case 'invalid-email':
+          message = "Invalid email format.";
+          break;
+        case 'user-disabled':
+          message = "This account has been disabled.";
+          break;
+        case 'invalid-credential':
+          message = "Invalid email or password.";
+          break;
+        default:
+          message = "Login failed: ${e.message}";
+      }
+      return BackendResult(success: false, message: message);
+    } catch (e) {
+      return BackendResult(success: false, message: "An error occurred: ${e.toString()}");
+    }
   }
-  
-  try {
-    String emailToUse = username.trim();
-    
-    // If username doesn't contain @, look it up in Firestore
-    if (!username.contains('@')) {
-      final querySnapshot = await _firestore
+
+  // =========================================================
+  // REGISTRATION
+  // =========================================================
+  static Future<BackendResult> registerUserForApproval({
+    required String username,
+    required String email,
+    required String password,
+    required String address,
+    required String userType,
+    String? businessName,
+    String? businessNature,
+    String? professionalTitle,
+    Uint8List? dtiFileBytes,
+    String? dtiFileName,
+  }) async {
+    try {
+      final usernameCheck = await _firestore
           .collection('users')
           .where('username', isEqualTo: username.trim())
           .limit(1)
           .get();
-      
-      if (querySnapshot.docs.isEmpty) {
+
+      if (usernameCheck.docs.isNotEmpty) {
         return BackendResult(
-          success: false,
-          message: "Username not found.",
-        );
+            success: false,
+            message: "Username already taken. Please choose another.");
       }
-      
-      emailToUse = querySnapshot.docs.first.data()['email'];
-    }
-    
-    // Authenticate with Firebase
-    final userCredential = await _auth.signInWithEmailAndPassword(
-      email: emailToUse,
-      password: password.trim(),
-    );
 
-    // Check if user document exists in Firestore
-    final userDoc = await _firestore
-        .collection('users')
-        .doc(userCredential.user!.uid)
-        .get();
-
-    
-    if (!userDoc.exists) {
-      await _auth.signOut();
-      return BackendResult(
-        success: false,
-        message: "User profile not found. Please contact administrator.",
+      final userCredential = await _auth.createUserWithEmailAndPassword(
+        email: email.trim(),
+        password: password.trim(),
       );
-    }
 
-    //  get the approved field with null check
-    final userData = userDoc.data();
-    if (userData == null || userData['approved'] != true) {
-      await _auth.signOut();
-      return BackendResult(
-        success: false,
-        message: "Account not yet approved by admin.",
-      );
-    }
-
-    return BackendResult(success: true);
-    
-  } on FirebaseAuthException catch (e) {
-    String message;
-    switch (e.code) {
-      case 'user-not-found':
-        message = "No account found with this email.";
-        break;
-      case 'wrong-password':
-        message = "Incorrect password.";
-        break;
-      case 'invalid-email':
-        message = "Invalid email format.";
-        break;
-      case 'user-disabled':
-        message = "This account has been disabled.";
-        break;
-      case 'invalid-credential':
-        message = "Invalid email or password.";
-        break;
-      default:
-        message = "Login failed: ${e.message}";
-    }
-    return BackendResult(success: false, message: message);
-    
-  } catch (e) {
-    return BackendResult(
-      success: false,
-      message: "An error occurred: ${e.toString()}",
-    );
-  }
-}
-
-// =========================================================
-// REGISTRATION
-// =========================================================
-static Future<BackendResult> registerUserForApproval({
-  required String username,
-  required String email,
-  required String password,
-  required String address,
-  required String userType,
-  String? businessName,
-  String? businessNature,
-  String? professionalTitle,
-  Uint8List? dtiFileBytes,
-  String? dtiFileName,
-}) async {
-  try {
-    // Check if username already exists
-    final usernameCheck = await _firestore
-        .collection('users')
-        .where('username', isEqualTo: username.trim())
-        .limit(1)
-        .get();
-    
-    if (usernameCheck.docs.isNotEmpty) {
-      return BackendResult(
-        success: false,
-        message: "Username already taken. Please choose another.",
-      );
-    }
-
-    // Create Firebase Authentication account
-    final userCredential = await _auth.createUserWithEmailAndPassword(
-      email: email.trim(),
-      password: password.trim(),
-    );
-
-    String? dtiUrl;
-    
-    // Upload DTI document to Cloudinary if provided
-    if (dtiFileBytes != null && dtiFileName != null) {
-      try {
-        dtiUrl = await _uploadToCloudinary(dtiFileBytes, dtiFileName);
-      } catch (e) {
-        // If upload fails, delete the created user and return error
-        await userCredential.user!.delete();
-        return BackendResult(
-          success: false,
-          message: "Failed to upload DTI document: ${e.toString()}",
-        );
+      String? dtiUrl;
+      if (dtiFileBytes != null && dtiFileName != null) {
+        try {
+          dtiUrl = await _uploadToCloudinary(dtiFileBytes, dtiFileName);
+        } catch (e) {
+          await userCredential.user!.delete();
+          return BackendResult(
+              success: false,
+              message: "Failed to upload DTI document: ${e.toString()}");
+        }
       }
-    }
 
-    // Save user info in Firestore with approved = false
-    await _firestore
-        .collection('users')
-        .doc(userCredential.user!.uid)
-        .set({
-      'username': username.trim(),
-      'email': email.trim(),
-      'address': address.trim(),
-      'userType': userType,
-      'businessName': businessName?.trim(),
-      'businessNature': businessNature?.trim(),
-      'professionalTitle': professionalTitle?.trim(),
-      'dtiDocumentUrl': dtiUrl,
-      'dtiFileName': dtiFileName,
-      'approved': false,
-      'createdAt': FieldValue.serverTimestamp(),
-    });
+      await _firestore.collection('users').doc(userCredential.user!.uid).set({
+        'username': username.trim(),
+        'email': email.trim(),
+        'address': address.trim(),
+        'userType': userType,
+        'businessName': businessName?.trim(),
+        'businessNature': businessNature?.trim(),
+        'professionalTitle': professionalTitle?.trim(),
+        'dtiDocumentUrl': dtiUrl,
+        'dtiFileName': dtiFileName,
+        'approved': false,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
 
-    return BackendResult(success: true);
-    
-  } on FirebaseAuthException catch (e) {
-    String message;
-    switch (e.code) {
-      case 'email-already-in-use':
-        message = "This email is already registered.";
-        break;
-      case 'invalid-email':
-        message = "Invalid email format.";
-        break;
-      case 'weak-password':
-        message = "Password is too weak.";
-        break;
-      default:
-        message = "Registration failed: ${e.message}";
+      return BackendResult(success: true);
+    } on FirebaseAuthException catch (e) {
+      String message;
+      switch (e.code) {
+        case 'email-already-in-use':
+          message = "This email is already registered.";
+          break;
+        case 'invalid-email':
+          message = "Invalid email format.";
+          break;
+        case 'weak-password':
+          message = "Password is too weak.";
+          break;
+        default:
+          message = "Registration failed: ${e.message}";
+      }
+      return BackendResult(success: false, message: message);
+    } catch (e) {
+      return BackendResult(success: false, message: "An error occurred: ${e.toString()}");
     }
-    return BackendResult(success: false, message: message);
-    
-  } catch (e) {
-    return BackendResult(
-      success: false,
-      message: "An error occurred: ${e.toString()}",
-    );
   }
-}
 
-
-  /// ========================================================
-  /// SUBMIT EVENT (USER to ADMIN APPROVAL)
-  /// ========================================================
+  // =========================================================
+  // SUBMIT EVENT
+  // =========================================================
   static Future<String> submitEventForApproval({
     required String title,
     required String venue,
@@ -278,9 +266,7 @@ static Future<BackendResult> registerUserForApproval({
     required int availableSlots,
   }) async {
     final user = _auth.currentUser;
-    if (user == null) {
-      throw Exception('User not logged in'); // an accoxnt must be logged in to submit an event
-    }
+    if (user == null) throw Exception('User not logged in');
 
     final normalizedDate = DateTime(date.year, date.month, date.day);
 
@@ -303,19 +289,18 @@ static Future<BackendResult> registerUserForApproval({
     return docRef.id;
   }
 
-  /// ========================================================
-  /// APPROVED EVENTS STREAM (FOR CALENDAR)
-  /// ========================================================
+  // =========================================================
+  // APPROVED EVENTS STREAM
+  // =========================================================
   static Stream<List<UpcomingEvent>> approvedEventsStream() {
     return _firestore
         .collection('events')
-        .where('approved', isEqualTo: true) // filter only approved events 
+        .where('approved', isEqualTo: true)
         .snapshots()
         .map((snapshot) {
       return snapshot.docs.map((doc) {
         final d = doc.data();
         final date = (d['date'] as Timestamp).toDate();
-
         return UpcomingEvent(
           date: date,
           event: CalendarEvent(
@@ -323,14 +308,8 @@ static Future<BackendResult> registerUserForApproval({
             venue: d['venue'],
             description: d['description'],
             imageUrl: d['imageUrl'],
-            startTime: TimeOfDay(
-              hour: d['startHour'],
-              minute: d['startMinute'],
-            ),
-            endTime: TimeOfDay(
-              hour: d['endHour'],
-              minute: d['endMinute'],
-            ),
+            startTime: TimeOfDay(hour: d['startHour'], minute: d['startMinute']),
+            endTime: TimeOfDay(hour: d['endHour'], minute: d['endMinute']),
             approved: true,
           ),
         );
@@ -338,20 +317,20 @@ static Future<BackendResult> registerUserForApproval({
     });
   }
 
-  /// ========================================================
-  /// USER NOTIFICATION (EVENT APPROVED)
-  /// ========================================================
+  // =========================================================
+  // USER NOTIFICATION
+  // =========================================================
   static Stream<QuerySnapshot> userApprovalNotifications() {
     return _firestore
         .collection('events')
-        .where('createdBy', isEqualTo: _auth.currentUser!.uid) 
+        .where('createdBy', isEqualTo: _auth.currentUser!.uid)
         .where('approved', isEqualTo: true)
         .snapshots();
   }
 
-  /// ========================================================
-  /// EVENT ATTENDANCE
-  /// ========================================================
+  // =========================================================
+  // EVENT ATTENDANCE
+  // =========================================================
   static Future<BackendResult> attendEvent({
     required CalendarEvent event,
     required DateTime date,
@@ -365,24 +344,20 @@ static Future<BackendResult> registerUserForApproval({
         'status': 'attending',
         'createdAt': Timestamp.now(),
       });
-
       return BackendResult(success: true);
     } catch (e) {
       return BackendResult(success: false, message: e.toString());
     }
   }
 
-
-  // ========================================================
+  // =========================================================
   // PROFILE METHODS
-  // ========================================================
+  // =========================================================
   static Future<Map<String, dynamic>?> fetchUserProfile() async {
     final user = _auth.currentUser;
     if (user == null) return null;
-
     final doc = await _firestore.collection('users').doc(user.uid).get();
     if (!doc.exists) return null;
-
     return doc.data();
   }
 
@@ -403,7 +378,6 @@ static Future<BackendResult> registerUserForApproval({
         'address': address.trim(),
         'location': location,
         'updatedAt': FieldValue.serverTimestamp(),
-        'status': 'pending',
         'businesses': businesses,
       }, SetOptions(merge: true));
 
@@ -413,37 +387,181 @@ static Future<BackendResult> registerUserForApproval({
     }
   }
 
-  // ========================================================
+  // =========================================================
+  // SAVE BUSINESS LOCATION (top-level, for backward compat)
+  // =========================================================
+  static Future<BackendResult> saveBusinessLocation({
+    required double lat,
+    required double lng,
+    required String address,
+    String? logoUrl,
+  }) async {
+    try {
+      final user = _auth.currentUser;
+      if (user == null) throw Exception('User not logged in');
+
+      await _firestore.collection('users').doc(user.uid).set({
+        'location': {'lat': lat, 'lng': lng, 'address': address.trim()},
+        'logoUrl': logoUrl,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      return BackendResult(success: true);
+    } catch (e) {
+      return BackendResult(success: false, message: e.toString());
+    }
+  }
+
+  // =========================================================
+  // FETCH CAVITE BUSINESS PINS
+  // Reads from businesses[] array (new) with top-level location fallback (old)
+  // =========================================================
+  static Future<List<BusinessPin>> fetchCaviteBusinessPins() async {
+    const double minLat = 14.10;
+    const double maxLat = 14.50;
+    const double minLng = 120.60;
+    const double maxLng = 121.10;
+
+    final snapshot = await _firestore
+        .collection('users')
+        .where('approved', isEqualTo: true)
+        .get();
+
+    final List<BusinessPin> pins = [];
+
+    for (final doc in snapshot.docs) {
+      final data = doc.data();
+      bool addedFromBusinesses = false;
+
+      // ── PRIMARY: Read each business in businesses[] array ──
+      final businesses = data['businesses'];
+      if (businesses != null && businesses is List) {
+        for (final b in businesses) {
+          if (b is! Map) continue;
+
+          final lat = (b['lat'] as num?)?.toDouble();
+          final lng = (b['lng'] as num?)?.toDouble();
+          if (lat == null || lng == null) continue;
+          if (lat < minLat || lat > maxLat ||
+              lng < minLng || lng > maxLng) continue;
+
+          final businessName = (b['name'] as String?)?.isNotEmpty == true
+              ? b['name'] as String
+              : (data['businessName'] as String? ??
+                  data['name'] as String? ??
+                  'Unknown');
+
+          final logo = (b['logoUrl'] as String?)?.isNotEmpty == true
+              ? b['logoUrl'] as String
+              : data['logoUrl'] as String?;
+
+          final addr = (b['address'] as String?)?.isNotEmpty == true
+              ? b['address'] as String
+              : ((data['location'] as Map?)?['address'] as String? ??
+                  data['address'] as String? ??
+                  '');
+
+          pins.add(BusinessPin(
+            uid: doc.id,
+            name: data['name'] as String? ?? '',
+            businessName: businessName,
+            userType: data['userType'] as String? ?? '',
+            email: data['email'] as String? ?? '',
+            phone: (b['phone'] as String?)?.isNotEmpty == true
+                ? b['phone'] as String
+                : (data['phone'] as String? ?? ''),
+            lat: lat,
+            lng: lng,
+            address: addr,
+            logoUrl: logo,
+            businessDesc: b['desc'] as String? ?? '',
+          ));
+          addedFromBusinesses = true;
+        }
+      }
+
+      // ── FALLBACK: top-level location field (old data structure) ──
+      if (!addedFromBusinesses) {
+        final loc = data['location'];
+        if (loc is Map) {
+          final lat = (loc['lat'] as num?)?.toDouble();
+          final lng = (loc['lng'] as num?)?.toDouble();
+          if (lat != null && lng != null &&
+              lat >= minLat && lat <= maxLat &&
+              lng >= minLng && lng <= maxLng) {
+            pins.add(BusinessPin(
+              uid: doc.id,
+              name: data['name'] as String? ?? '',
+              businessName: data['businessName'] as String? ??
+                  data['name'] as String? ??
+                  'Unknown',
+              userType: data['userType'] as String? ?? '',
+              email: data['email'] as String? ?? '',
+              phone: data['phone'] as String? ?? '',
+              lat: lat,
+              lng: lng,
+              address: loc['address'] as String? ??
+                  data['address'] as String? ??
+                  '',
+              logoUrl: data['logoUrl'] as String?,
+              businessDesc: '',
+            ));
+          }
+        }
+      }
+    }
+
+    return pins;
+  }
+
+  // =========================================================
+  // UPLOAD LOGO
+  // =========================================================
+  static Future<String?> uploadLogoImage(Uint8List bytes, String fileName) async {
+    try {
+      return await _uploadToCloudinary(
+        bytes,
+        fileName,
+        folder: 'business_logos',
+        resourceType: 'image',
+      );
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // =========================================================
   // CLOUDINARY UPLOAD HELPER
-  // ========================================================
-  static Future<String> _uploadToCloudinary(Uint8List fileBytes, String fileName) async {
-    // Replace these with your actual Cloudinary credentials
+  // =========================================================
+  static Future<String> _uploadToCloudinary(
+    Uint8List fileBytes,
+    String fileName, {
+    String folder = 'dti_documents',
+    String resourceType = 'raw',
+  }) async {
     const cloudName = 'Ydfwe9loex';
     const uploadPreset = 'smartcard';
-    
-    final url = Uri.parse('https://api.cloudinary.com/v1_1/$cloudName/raw/upload');
-    
+
+    final url = Uri.parse(
+        'https://api.cloudinary.com/v1_1/$cloudName/$resourceType/upload');
+
     final request = http.MultipartRequest('POST', url);
     request.fields['upload_preset'] = uploadPreset;
-    request.fields['folder'] = 'dti_documents';
-    
+    request.fields['folder'] = folder;
     request.files.add(
-      http.MultipartFile.fromBytes(
-        'file',
-        fileBytes,
-        filename: fileName,
-      ),
+      http.MultipartFile.fromBytes('file', fileBytes, filename: fileName),
     );
-    
+
     final response = await request.send();
-    
+
     if (response.statusCode == 200) {
       final responseData = await response.stream.toBytes();
       final responseString = String.fromCharCodes(responseData);
       final jsonMap = json.decode(responseString);
       return jsonMap['secure_url'];
     } else {
-      throw Exception('Cloudinary upload failed with status: ${response.statusCode}');
+      throw Exception(
+          'Cloudinary upload failed with status: ${response.statusCode}');
     }
   }
 }

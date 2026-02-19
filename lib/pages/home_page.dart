@@ -9,6 +9,7 @@ import 'qr_code_page.dart';
 import 'analytics_page.dart';
 import 'scanner_page.dart'; 
 import '../backend/backend.dart';
+import 'cavite_map_widget.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -106,31 +107,26 @@ class _HomePageState extends State<HomePage> {
 
     switch (index) {
       case 0:
-        // Home (already here)
         break;
       case 1:
-        // Navigate to Calendar
         Navigator.push(
           context,
           MaterialPageRoute(builder: (context) => const CalendarPage()),
         );
         break;
       case 2:
-        // Navigate to Scan
         Navigator.push(
           context,
           MaterialPageRoute(builder: (context) => const ScannerPage()),
         );
         break;
       case 3:
-        // Navigate to Chat
         Navigator.push(
           context,
           MaterialPageRoute(builder: (context) => const MessagesPage()),
         );
         break;
       case 4:
-        // Navigate to Settings
         Navigator.push(
           context,
           MaterialPageRoute(builder: (context) => const SettingsPage()),
@@ -168,7 +164,6 @@ class _HomePageState extends State<HomePage> {
                           Text(_userName,
                               style: const TextStyle(
                                   fontSize: 14, fontWeight: FontWeight.w500)),
-                          // View Profile button with hover effect
                           MouseRegion(
                             onEnter: (_) =>
                                 setState(() => _isHovering = true),
@@ -204,7 +199,7 @@ class _HomePageState extends State<HomePage> {
               ),
               const SizedBox(height: 20),
 
-              ///  SEARCH BAR
+              /// SEARCH BAR
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 decoration: BoxDecoration(
@@ -279,6 +274,10 @@ class _HomePageState extends State<HomePage> {
               ),
               const SizedBox(height: 24),
 
+              /// ── BUSINESS MAP SECTION ──
+              const CaviteMapSection(),
+              const SizedBox(height: 24),
+
               /// RECENTLY INTERACTED USERS
               const Text("Recently Interacted With...",
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
@@ -296,7 +295,7 @@ class _HomePageState extends State<HomePage> {
         ),
       ),
 
-      ///  Bottom Navigation Bar (only in HomePage)
+      /// Bottom Navigation Bar
       bottomNavigationBar: BottomNavigationBar(
         type: BottomNavigationBarType.fixed,
         currentIndex: _selectedIndex,
