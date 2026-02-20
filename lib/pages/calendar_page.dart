@@ -626,7 +626,7 @@ class _EventDetailSheet extends StatelessWidget {
                         child: ElevatedButton(
                           onPressed: () => Navigator.pop(context),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: cbocPrimary,
+                            backgroundColor: cbocAccent,
                             minimumSize:
                                 const Size(double.infinity, 48),
                             shape: RoundedRectangleBorder(
@@ -635,7 +635,7 @@ class _EventDetailSheet extends StatelessWidget {
                           ),
                           child: const Text('Attend Event',
                               style: TextStyle(
-                                  color: Colors.white,
+                                  color: cbocPrimary,
                                   fontWeight: FontWeight.bold)),
                         ),
                       ),
