@@ -7,7 +7,7 @@ import 'pages/login_page.dart';
 import 'pages/register_page.dart';
 import 'pages/home_page.dart';
 import 'pages/menu_page.dart';
-import 'pages/announcement_page.dart';
+import 'pages/notification_page.dart';
 import 'pages/messages_page.dart';
 import 'pages/about_us_page.dart';
 import 'pages/e_portfolio_page.dart';
@@ -79,7 +79,7 @@ class SmartCallingCardApp extends StatelessWidget {
         '/register': (context) => const RegisterPage(),
         '/home': (context) => const HomePage(),
         '/menu': (context) => const MenuPage(),
-        '/announcements': (context) => const AnnouncementPage(),
+        '/announcements': (context) => const NotificationPage(),
         '/messages': (context) => const MessagesPage(),
         '/about_us': (context) => const AboutUsPage(),
         '/e_portfolio': (context) => const EPortfolioPage(),

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 // Import placeholder pages
-import 'announcement_page.dart';
+import 'notification_page.dart';
 import 'messages_page.dart';
 import 'about_us_page.dart';
 import 'e_portfolio_page.dart';
@@ -66,11 +66,11 @@ class _MenuPageState extends State<MenuPage> {
               Expanded(
                 child: ListView(
                   children: [
-                    _menuItem(Icons.campaign, "Announcements", () {
+                    _menuItem(Icons.campaign, "Notifications", () {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (_) => const AnnouncementPage(),
+                          builder: (_) => const NotificationPage(),
                         ),
                       );
                     }),

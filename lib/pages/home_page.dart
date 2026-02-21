@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'user_profile.dart';
+import 'notification_page.dart';
+import 'scanner_page.dart';
 import 'menu_page.dart';
 import 'calendar_page.dart';
 import 'messages_page.dart';
@@ -181,20 +183,28 @@ class _HomeBodyState extends State<_HomeBody> {
               ),
             ],
           ),
-          Stack(
-            children: [
-              const Icon(Icons.notifications_outlined, size: 28),
-              Positioned(
-                right: 0,
-                top: 0,
-                child: Container(
-                  width: 8,
-                  height: 8,
-                  decoration: const BoxDecoration(
-                      color: Colors.red, shape: BoxShape.circle),
+          IconButton(
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const NotificationPage()),
+            ),
+            icon: Stack(
+              children: [
+                const Icon(Icons.notifications_outlined, size: 28),
+                Positioned(
+                  right: 0,
+                    top: 0,
+                  child: Container(
+                    width: 8,
+                    height: 8,
+                    decoration: const BoxDecoration(
+                      color: Colors.red,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ],
       ),

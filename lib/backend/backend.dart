@@ -39,13 +39,44 @@ class CalendarEvent {
 }
 
 class UpcomingEvent {
+  final String id;
   final DateTime date;
   final CalendarEvent event;
   final int availableSlots;
   UpcomingEvent({
+    required this.id,
     required this.date,
     required this.event,
     required this.availableSlots,
+  });
+}
+
+/// ========================================================
+/// USER SUBMITTED EVENT MODEL (with status)
+/// ========================================================
+class UserSubmittedEvent {
+  final String id;
+  final String title;
+  final String venue;
+  final String description;
+  final DateTime date;
+  final TimeOfDay startTime;
+  final TimeOfDay endTime;
+  final String status; // 'pending', 'approved', 'rejected', 'cancel_requested', 'cancelled'
+  final int availableSlots;
+  final String? posterUrl;
+
+  UserSubmittedEvent({
+    required this.id,
+    required this.title,
+    required this.venue,
+    required this.description,
+    required this.date,
+    required this.startTime,
+    required this.endTime,
+    required this.status,
+    required this.availableSlots,
+    this.posterUrl,
   });
 }
 
@@ -124,6 +155,29 @@ class PostComment {
     required this.authorName,
     required this.content,
     required this.createdAt,
+  });
+}
+
+/// ========================================================
+/// APP NOTIFICATION MODEL
+/// ========================================================
+class AppNotification {
+  final String id;
+  final String type; // 'new_event', 'event_approved', 'event_cancelled', 'cancel_requested'
+  final String title;
+  final String body;
+  final String? eventId;
+  final DateTime createdAt;
+  final bool read;
+
+  AppNotification({
+    required this.id,
+    required this.type,
+    required this.title,
+    required this.body,
+    this.eventId,
+    required this.createdAt,
+    required this.read,
   });
 }
 
@@ -337,6 +391,7 @@ class BackendService {
       'endHour': end.hour,
       'endMinute': end.minute,
       'approved': false,
+      'status': 'pending', // 'pending', 'approved', 'rejected', 'cancel_requested', 'cancelled'
       'createdBy': user.uid,
       'createdAt': FieldValue.serverTimestamp(),
       'availableSlots': availableSlots,
@@ -346,18 +401,197 @@ class BackendService {
   }
 
   // =========================================================
+  // UPDATE PENDING EVENT (edit before admin approval)
+  // =========================================================
+  static Future<BackendResult> updatePendingEvent({
+    required String eventId,
+    required String title,
+    required String venue,
+    required String description,
+    required DateTime date,
+    required TimeOfDay start,
+    required TimeOfDay end,
+    String? posterUrl,
+    required int availableSlots,
+  }) async {
+    try {
+      final user = _auth.currentUser;
+      if (user == null) throw Exception('User not logged in');
+
+      final doc = await _firestore.collection('events').doc(eventId).get();
+      if (!doc.exists) return BackendResult(success: false, message: 'Event not found');
+
+      final data = doc.data()!;
+      if (data['createdBy'] != user.uid) {
+        return BackendResult(success: false, message: 'Unauthorized');
+      }
+      if (data['approved'] == true) {
+        return BackendResult(
+            success: false,
+            message: 'Cannot edit an already approved event.');
+      }
+
+      final normalizedDate = DateTime(date.year, date.month, date.day);
+
+      await _firestore.collection('events').doc(eventId).update({
+        'title': title,
+        'venue': venue,
+        'description': description,
+        'imageUrl': posterUrl,
+        'date': Timestamp.fromDate(normalizedDate),
+        'startHour': start.hour,
+        'startMinute': start.minute,
+        'endHour': end.hour,
+        'endMinute': end.minute,
+        'availableSlots': availableSlots,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      return BackendResult(success: true);
+    } catch (e) {
+      return BackendResult(success: false, message: e.toString());
+    }
+  }
+
+  // =========================================================
+  // UPDATE PENDING EVENT (edit before admin approval)
+  // =========================================================
+
+  // =========================================================
+  // CANCEL PENDING EVENT (user-initiated, not yet approved)
+  // =========================================================
+  static Future<BackendResult> cancelPendingEvent(String eventId) async {
+    try {
+      final user = _auth.currentUser;
+      if (user == null) throw Exception('User not logged in');
+
+      final doc = await _firestore.collection('events').doc(eventId).get();
+      if (!doc.exists) return BackendResult(success: false, message: 'Event not found');
+
+      final data = doc.data()!;
+      if (data['createdBy'] != user.uid) {
+        return BackendResult(success: false, message: 'Unauthorized');
+      }
+      if (data['approved'] == true) {
+        return BackendResult(
+            success: false, message: 'Event is already approved. Use request cancellation instead.');
+      }
+
+      await _firestore.collection('events').doc(eventId).update({
+        'status': 'cancelled',
+        'cancelledAt': FieldValue.serverTimestamp(),
+      });
+
+      return BackendResult(success: true);
+    } catch (e) {
+      return BackendResult(success: false, message: e.toString());
+    }
+  }
+
+  // =========================================================
+  // REQUEST CANCELLATION (for approved events — needs admin approval)
+  // =========================================================
+  static Future<BackendResult> requestEventCancellation(
+      String eventId, String reason) async {
+    try {
+      final user = _auth.currentUser;
+      if (user == null) throw Exception('User not logged in');
+
+      final doc = await _firestore.collection('events').doc(eventId).get();
+      if (!doc.exists) return BackendResult(success: false, message: 'Event not found');
+
+      final data = doc.data()!;
+      if (data['createdBy'] != user.uid) {
+        return BackendResult(success: false, message: 'Unauthorized');
+      }
+
+      await _firestore.collection('events').doc(eventId).update({
+        'status': 'cancel_requested',
+        'cancelReason': reason.trim(),
+        'cancelRequestedAt': FieldValue.serverTimestamp(),
+      });
+
+      // Notify admins (stored in a separate admin_notifications collection)
+      await _firestore.collection('admin_notifications').add({
+        'type': 'cancel_request',
+        'eventId': eventId,
+        'eventTitle': data['title'],
+        'requestedBy': user.uid,
+        'reason': reason.trim(),
+        'read': false,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      return BackendResult(success: true);
+    } catch (e) {
+      return BackendResult(success: false, message: e.toString());
+    }
+  }
+
+  // =========================================================
+  // ADMIN: APPROVE CANCELLATION + NOTIFY RSVPed USERS
+  // =========================================================
+  static Future<BackendResult> adminApproveCancellation(String eventId) async {
+    try {
+      final doc = await _firestore.collection('events').doc(eventId).get();
+      if (!doc.exists) return BackendResult(success: false, message: 'Event not found');
+
+      final data = doc.data()!;
+
+      // Mark event as cancelled
+      await _firestore.collection('events').doc(eventId).update({
+        'status': 'cancelled',
+        'approved': false,
+        'cancelledAt': FieldValue.serverTimestamp(),
+      });
+
+      // Fetch all RSVPed users for this event
+      final attendees = await _firestore
+          .collection('event_attendance')
+          .where('eventId', isEqualTo: eventId)
+          .where('status', isEqualTo: 'attending')
+          .get();
+
+      // Send in-app notification to each attendee
+      final batch = _firestore.batch();
+      for (final attendee in attendees.docs) {
+        final attendeeUid = attendee.data()['uid'] as String?;
+        if (attendeeUid == null) continue;
+
+        final notifRef = _firestore.collection('user_notifications').doc();
+        batch.set(notifRef, {
+          'uid': attendeeUid,
+          'type': 'event_cancelled',
+          'title': 'Event Cancelled',
+          'body': '"${data['title']}" has been cancelled.',
+          'eventId': eventId,
+          'read': false,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+      }
+      await batch.commit();
+
+      return BackendResult(success: true);
+    } catch (e) {
+      return BackendResult(success: false, message: e.toString());
+    }
+  }
+
+  // =========================================================
   // APPROVED EVENTS STREAM
   // =========================================================
   static Stream<List<UpcomingEvent>> approvedEventsStream() {
     return _firestore
         .collection('events')
         .where('approved', isEqualTo: true)
+        .where('status', isEqualTo: 'approved')
         .snapshots()
         .map((snapshot) {
       return snapshot.docs.map((doc) {
         final d = doc.data();
         final date = (d['date'] as Timestamp).toDate();
         return UpcomingEvent(
+          id: doc.id,
           date: date,
           availableSlots: (d['availableSlots'] as num?)?.toInt() ?? 0,
           event: CalendarEvent(
@@ -376,36 +610,227 @@ class BackendService {
   }
 
   // =========================================================
-  // USER NOTIFICATION
+  // USER'S OWN SUBMITTED EVENTS (with status)
+  // No orderBy to avoid requiring a composite Firestore index.
+  // Sorting is done client-side by createdAt descending.
   // =========================================================
-  static Stream<QuerySnapshot> userApprovalNotifications() {
+  static Stream<List<UserSubmittedEvent>> mySubmittedEventsStream() {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) return Stream.value([]);
+
     return _firestore
         .collection('events')
-        .where('createdBy', isEqualTo: _auth.currentUser!.uid)
-        .where('approved', isEqualTo: true)
-        .snapshots();
+        .where('createdBy', isEqualTo: uid)
+        // ⚠️ No .orderBy() here — avoids Firestore composite index requirement.
+        // We sort client-side below instead.
+        .snapshots()
+        .map((snapshot) {
+      final results = snapshot.docs.map((doc) {
+        final d = doc.data();
+
+        // Safely parse date — skip doc if date is missing
+        final rawDate = d['date'];
+        if (rawDate == null) return null;
+        final date = (rawDate as Timestamp).toDate();
+
+        // Derive status: if approved flag is true but status is still 'pending',
+        // treat it as approved (handles legacy docs without status field)
+        String status = d['status'] as String? ?? 'pending';
+        if (d['approved'] == true && status == 'pending') status = 'approved';
+
+        return UserSubmittedEvent(
+          id: doc.id,
+          title: d['title'] ?? '',
+          venue: d['venue'] ?? '',
+          description: d['description'] ?? '',
+          date: date,
+          startTime: TimeOfDay(
+              hour: d['startHour'] ?? 0, minute: d['startMinute'] ?? 0),
+          endTime: TimeOfDay(
+              hour: d['endHour'] ?? 0, minute: d['endMinute'] ?? 0),
+          status: status,
+          availableSlots: (d['availableSlots'] as num?)?.toInt() ?? 0,
+          posterUrl: d['imageUrl'],
+        );
+      }).whereType<UserSubmittedEvent>().toList();
+
+      // Sort client-side: newest first using the event date as fallback
+      results.sort((a, b) => b.date.compareTo(a.date));
+      return results;
+    });
   }
 
   // =========================================================
-  // EVENT ATTENDANCE
+  // USER NOTIFICATION STREAM (in-app notifications)
+  // =========================================================
+  static Stream<List<AppNotification>> userNotificationsStream() {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) return Stream.value([]);
+
+    return _firestore
+        .collection('user_notifications')
+        .where('uid', isEqualTo: uid)
+        .orderBy('createdAt', descending: true)
+        .limit(50)
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs.map((doc) {
+        final d = doc.data();
+        return AppNotification(
+          id: doc.id,
+          type: d['type'] ?? '',
+          title: d['title'] ?? '',
+          body: d['body'] ?? '',
+          eventId: d['eventId'],
+          createdAt: (d['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+          read: d['read'] == true,
+        );
+      }).toList();
+    });
+  }
+
+  // =========================================================
+  // STREAM: NEWLY APPROVED EVENTS (for banner notifications)
+  // Shows events approved within the last 7 days
+  // =========================================================
+  static Stream<List<UpcomingEvent>> recentlyApprovedEventsStream() {
+    final sevenDaysAgo = DateTime.now().subtract(const Duration(days: 7));
+    return _firestore
+        .collection('events')
+        .where('approved', isEqualTo: true)
+        .where('status', isEqualTo: 'approved')
+        .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(DateTime.now()))
+        .orderBy('date')
+        .limit(5)
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs.map((doc) {
+        final d = doc.data();
+        final date = (d['date'] as Timestamp).toDate();
+        return UpcomingEvent(
+          id: doc.id,
+          date: date,
+          availableSlots: (d['availableSlots'] as num?)?.toInt() ?? 0,
+          event: CalendarEvent(
+            title: d['title'],
+            venue: d['venue'],
+            description: d['description'],
+            imageUrl: d['imageUrl'],
+            startTime: TimeOfDay(hour: d['startHour'], minute: d['startMinute']),
+            endTime: TimeOfDay(hour: d['endHour'], minute: d['endMinute']),
+            approved: true,
+          ),
+        );
+      }).toList();
+    });
+  }
+
+  // =========================================================
+  // MARK NOTIFICATION AS READ
+  // =========================================================
+  static Future<void> markNotificationRead(String notifId) async {
+    await _firestore.collection('user_notifications').doc(notifId).update({'read': true});
+  }
+
+  static Future<void> markAllNotificationsRead() async {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) return;
+    final snap = await _firestore
+        .collection('user_notifications')
+        .where('uid', isEqualTo: uid)
+        .where('read', isEqualTo: false)
+        .get();
+    final batch = _firestore.batch();
+    for (final doc in snap.docs) {
+      batch.update(doc.reference, {'read': true});
+    }
+    await batch.commit();
+  }
+
+  // =========================================================
+  // EVENT ATTENDANCE (RSVP) — stores eventId for cancellation notifs
   // =========================================================
   static Future<BackendResult> attendEvent({
-    required CalendarEvent event,
-    required DateTime date,
+    required UpcomingEvent upcomingEvent,
   }) async {
     try {
+      final uid = _auth.currentUser?.uid;
+      if (uid == null) throw Exception('Not logged in');
+
+      // Check if already attending
+      final existing = await _firestore
+          .collection('event_attendance')
+          .where('uid', isEqualTo: uid)
+          .where('eventId', isEqualTo: upcomingEvent.id)
+          .limit(1)
+          .get();
+
+      if (existing.docs.isNotEmpty) {
+        return BackendResult(success: false, message: 'Already attending this event');
+      }
+
       await _firestore.collection('event_attendance').add({
-        'uid': _auth.currentUser!.uid,
-        'eventTitle': event.title,
-        'venue': event.venue,
-        'date': Timestamp.fromDate(date),
+        'uid': uid,
+        'eventId': upcomingEvent.id,
+        'eventTitle': upcomingEvent.event.title,
+        'venue': upcomingEvent.event.venue,
+        'date': Timestamp.fromDate(upcomingEvent.date),
         'status': 'attending',
         'createdAt': Timestamp.now(),
       });
+
+      // Decrement available slots
+      await _firestore.collection('events').doc(upcomingEvent.id).update({
+        'availableSlots': FieldValue.increment(-1),
+      });
+
       return BackendResult(success: true);
     } catch (e) {
       return BackendResult(success: false, message: e.toString());
     }
+  }
+
+  // =========================================================
+  // CHECK IF USER IS ATTENDING
+  // =========================================================
+  static Future<bool> isAttendingEvent(String eventId) async {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) return false;
+    final snap = await _firestore
+        .collection('event_attendance')
+        .where('uid', isEqualTo: uid)
+        .where('eventId', isEqualTo: eventId)
+        .where('status', isEqualTo: 'attending')
+        .limit(1)
+        .get();
+    return snap.docs.isNotEmpty;
+  }
+
+  // =========================================================
+  // NOTIFY EVENT CREATOR when their event is approved
+  // (Called by admin-side code or cloud function)
+  // =========================================================
+  static Future<void> notifyEventApproved(String eventId) async {
+    final doc = await _firestore.collection('events').doc(eventId).get();
+    if (!doc.exists) return;
+    final data = doc.data()!;
+    final creatorUid = data['createdBy'] as String?;
+    if (creatorUid == null) return;
+
+    await _firestore.collection('user_notifications').add({
+      'uid': creatorUid,
+      'type': 'event_approved',
+      'title': 'Event Approved!',
+      'body': '"${data['title']}" has been approved and is now live.',
+      'eventId': eventId,
+      'read': false,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+
+    // Update the event status
+    await _firestore.collection('events').doc(eventId).update({
+      'status': 'approved',
+    });
   }
 
   // =========================================================
