@@ -14,9 +14,11 @@ class CalendarPage extends StatefulWidget {
   State<CalendarPage> createState() => _CalendarPageState();
 }
 
-class _CalendarPageState extends State<CalendarPage> {
+class _CalendarPageState extends State<CalendarPage>
+    with SingleTickerProviderStateMixin {
   DateTime _focusedDay = DateTime.now();
   DateTime? _selectedDay;
+  late TabController _tabController;
 
   final _titleCtrl = TextEditingController();
   final _venueCtrl = TextEditingController();
@@ -26,6 +28,22 @@ class _CalendarPageState extends State<CalendarPage> {
   DateTime? _eventDate;
   TimeOfDay? _startTime;
   TimeOfDay? _endTime;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    _titleCtrl.dispose();
+    _venueCtrl.dispose();
+    _descCtrl.dispose();
+    _posterUrlCtrl.dispose();
+    super.dispose();
+  }
 
   bool _sameDay(DateTime a, DateTime b) =>
       a.year == b.year && a.month == b.month && a.day == b.day;
@@ -101,8 +119,9 @@ class _CalendarPageState extends State<CalendarPage> {
                     Expanded(
                       child: _tappableField(
                         label: 'Start Time',
-                        value:
-                            _startTime == null ? '' : _startTime!.format(ctx),
+                        value: _startTime == null
+                            ? ''
+                            : _startTime!.format(ctx),
                         icon: Icons.access_time,
                         onTap: () async {
                           final picked = await showTimePicker(
@@ -165,8 +184,7 @@ class _CalendarPageState extends State<CalendarPage> {
                 if (slots == null || slots <= 0) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
-                        content:
-                            Text('Please enter a valid number of slots')),
+                        content: Text('Please enter a valid number of slots')),
                   );
                   return;
                 }
@@ -248,162 +266,1103 @@ class _CalendarPageState extends State<CalendarPage> {
       appBar: AppBar(
         title: const Text('Calendar',
             style: TextStyle(fontWeight: FontWeight.bold)),
+        bottom: TabBar(
+          controller: _tabController,
+          indicatorColor: cbocPrimary,
+          labelColor: cbocPrimary,
+          unselectedLabelColor: Colors.grey,
+          tabs: const [
+            Tab(text: 'Events'),
+            Tab(text: 'My Submissions'),
+          ],
+        ),
       ),
       floatingActionButton: FloatingActionButton(
         backgroundColor: cbocAccent,
         onPressed: _openAddEventDialog,
         child: const Icon(Icons.add, color: cbocPrimary),
       ),
-      body: StreamBuilder<List<UpcomingEvent>>(
-        stream: BackendService.approvedEventsStream(),
-        builder: (context, snapshot) {
-          final allEvents = snapshot.data ?? [];
-          final isLoading =
-              snapshot.connectionState == ConnectionState.waiting &&
-                  allEvents.isEmpty;
-
-          final visibleEvents = allEvents.where((e) {
-            if (_selectedDay != null) {
-              return _sameDay(e.date, _selectedDay!);
-            }
-            return _sameMonth(e.date, _focusedDay);
-          }).toList()
-            ..sort((a, b) => a.date.compareTo(b.date));
-
-          Map<DateTime, List<UpcomingEvent>> eventMap = {};
-          for (final e in allEvents) {
-            final key =
-                DateTime(e.date.year, e.date.month, e.date.day);
-            eventMap.putIfAbsent(key, () => []).add(e);
-          }
-
-          return Column(
-            children: [
-              Container(
-                color: Colors.white,
-                child: TableCalendar(
-                  firstDay: DateTime.utc(2020, 1, 1),
-                  lastDay: DateTime.utc(2030, 12, 31),
-                  focusedDay: _focusedDay,
-                  selectedDayPredicate: (day) =>
-                      _selectedDay != null && _sameDay(day, _selectedDay!),
-                  eventLoader: (day) {
-                    final key = DateTime(day.year, day.month, day.day);
-                    return eventMap[key] ?? [];
-                  },
-                  onDaySelected: (selected, focused) {
-                    setState(() {
-                      if (_selectedDay != null &&
-                          _sameDay(selected, _selectedDay!)) {
-                        _selectedDay = null;
-                      } else {
-                        _selectedDay = selected;
-                      }
-                      _focusedDay = focused;
-                    });
-                  },
-                  onPageChanged: (focused) {
-                    setState(() {
-                      _focusedDay = focused;
-                      _selectedDay = null;
-                    });
-                  },
-                  headerStyle: const HeaderStyle(
-                    titleCentered: true,
-                    formatButtonVisible: false,
-                  ),
-                  calendarStyle: CalendarStyle(
-                    todayDecoration: BoxDecoration(
-                        color: cbocAccent, shape: BoxShape.circle),
-                    selectedDecoration: BoxDecoration(
-                        color: cbocPrimary, shape: BoxShape.circle),
-                    markerDecoration: BoxDecoration(
-                        color: cbocSecondary, shape: BoxShape.circle),
-                    markerSize: 5,
-                    markersMaxCount: 3,
-                  ),
-                ),
-              ),
-              Container(
-                width: double.infinity,
-                color: Colors.white,
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-                child: Row(
-                  children: [
-                    const Icon(Icons.event_note_rounded,
-                        size: 16, color: cbocPrimary),
-                    const SizedBox(width: 6),
-                    Text(
-                      _selectedDay != null
-                          ? DateFormat('MMMM d, yyyy').format(_selectedDay!)
-                          : DateFormat('MMMM yyyy').format(_focusedDay),
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: cbocPrimary,
-                      ),
-                    ),
-                    if (_selectedDay != null) ...[
-                      const Spacer(),
-                      GestureDetector(
-                        onTap: () => setState(() => _selectedDay = null),
-                        child: const Text('Show all',
-                            style: TextStyle(
-                                fontSize: 12, color: Colors.grey)),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              const Divider(height: 1),
-              Expanded(
-                child: isLoading
-                    ? const Center(
-                        child: CircularProgressIndicator(
-                            color: cbocPrimary))
-                    : visibleEvents.isEmpty
-                        ? Center(
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.calendar_today_outlined,
-                                    size: 48,
-                                    color: Colors.grey.shade300),
-                                const SizedBox(height: 12),
-                                Text(
-                                  _selectedDay != null
-                                      ? 'No events on this day'
-                                      : 'No events this month',
-                                  style: TextStyle(
-                                      color: Colors.grey.shade400,
-                                      fontSize: 14),
-                                ),
-                              ],
-                            ),
-                          )
-                        : ListView.builder(
-                            padding: const EdgeInsets.fromLTRB(
-                                12, 10, 12, 80),
-                            itemCount: visibleEvents.length,
-                            itemBuilder: (_, i) {
-                              final item = visibleEvents[i];
-                              return _EventCard(
-                                item: item,
-                                onTap: () =>
-                                    _showEventDetail(context, item),
-                              );
-                            },
-                          ),
-              ),
-            ],
-          );
-        },
+      body: TabBarView(
+        controller: _tabController,
+        children: [
+          _EventsTab(
+            focusedDay: _focusedDay,
+            selectedDay: _selectedDay,
+            onFocusedDayChanged: (d) => setState(() => _focusedDay = d),
+            onSelectedDayChanged: (s, f) => setState(() {
+              _selectedDay = s;
+              _focusedDay = f;
+            }),
+            onDayCleared: () => setState(() => _selectedDay = null),
+            sameDay: _sameDay,
+            sameMonth: _sameMonth,
+            onEventTap: _showEventDetail,
+          ),
+          const _MySubmissionsTab(),
+        ],
       ),
     );
   }
 }
 
-// ── EVENT CARD ────────────────────────────────────────────────────────────────
+// ── EVENTS TAB ─────────────────────────────────────────────────────────────────
+// Shows ALL approved events + the user's own pending/rejected submissions on the
+// same calendar view, clearly labelled with status badges.
+
+class _EventsTab extends StatelessWidget {
+  final DateTime focusedDay;
+  final DateTime? selectedDay;
+  final void Function(DateTime) onFocusedDayChanged;
+  final void Function(DateTime, DateTime) onSelectedDayChanged;
+  final VoidCallback onDayCleared;
+  final bool Function(DateTime, DateTime) sameDay;
+  final bool Function(DateTime, DateTime) sameMonth;
+  final void Function(BuildContext, UpcomingEvent) onEventTap;
+
+  const _EventsTab({
+    required this.focusedDay,
+    required this.selectedDay,
+    required this.onFocusedDayChanged,
+    required this.onSelectedDayChanged,
+    required this.onDayCleared,
+    required this.sameDay,
+    required this.sameMonth,
+    required this.onEventTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    // Listen to both streams simultaneously
+    return StreamBuilder<List<UpcomingEvent>>(
+      stream: BackendService.approvedEventsStream(),
+      builder: (context, approvedSnap) {
+        return StreamBuilder<List<UserSubmittedEvent>>(
+          stream: BackendService.mySubmittedEventsStream(),
+          builder: (context, mySnap) {
+            final approvedEvents = approvedSnap.data ?? [];
+            final myEvents = mySnap.data ?? [];
+
+            final isLoading =
+                approvedSnap.connectionState == ConnectionState.waiting &&
+                    approvedEvents.isEmpty;
+
+            // Show user's own events that are: pending, rejected, or
+            // cancel_requested. Approved ones already appear in approvedEvents.
+            // Cancelled ones are hidden.
+            final myVisibleSubmissions = myEvents
+                .where((e) =>
+                    e.status == 'pending' ||
+                    e.status == 'rejected' ||
+                    e.status == 'cancel_requested')
+                .toList();
+
+            // Build marker map for calendar dots
+            final Map<DateTime, List<dynamic>> markerMap = {};
+            for (final e in approvedEvents) {
+              final key = DateTime(e.date.year, e.date.month, e.date.day);
+              markerMap.putIfAbsent(key, () => []).add(e);
+            }
+            for (final e in myVisibleSubmissions) {
+              final key = DateTime(e.date.year, e.date.month, e.date.day);
+              markerMap.putIfAbsent(key, () => []).add(e);
+            }
+
+            // Filter by selected day / month
+            final List<UpcomingEvent> visibleApproved =
+                approvedEvents.where((e) {
+              if (selectedDay != null) return sameDay(e.date, selectedDay!);
+              return sameMonth(e.date, focusedDay);
+            }).toList()
+                  ..sort((a, b) => a.date.compareTo(b.date));
+
+            final List<UserSubmittedEvent> visibleMine =
+                myVisibleSubmissions.where((e) {
+              if (selectedDay != null) return sameDay(e.date, selectedDay!);
+              return sameMonth(e.date, focusedDay);
+            }).toList()
+                  ..sort((a, b) => a.date.compareTo(b.date));
+
+            final bool nothingVisible =
+                visibleApproved.isEmpty && visibleMine.isEmpty;
+
+            return Column(
+              children: [
+                // ── CALENDAR ─────────────────────────────────────────────
+                Container(
+                  color: Colors.white,
+                  child: TableCalendar(
+                    firstDay: DateTime.utc(2020, 1, 1),
+                    lastDay: DateTime.utc(2030, 12, 31),
+                    focusedDay: focusedDay,
+                    selectedDayPredicate: (day) =>
+                        selectedDay != null && sameDay(day, selectedDay!),
+                    eventLoader: (day) {
+                      final key = DateTime(day.year, day.month, day.day);
+                      return markerMap[key] ?? [];
+                    },
+                    onDaySelected: (selected, focused) {
+                      if (selectedDay != null &&
+                          sameDay(selected, selectedDay!)) {
+                        onDayCleared();
+                      } else {
+                        onSelectedDayChanged(selected, focused);
+                      }
+                    },
+                    onPageChanged: (focused) {
+                      onFocusedDayChanged(focused);
+                      onDayCleared();
+                    },
+                    headerStyle: const HeaderStyle(
+                      titleCentered: true,
+                      formatButtonVisible: false,
+                    ),
+                    calendarStyle: CalendarStyle(
+                      todayDecoration: BoxDecoration(
+                          color: cbocAccent, shape: BoxShape.circle),
+                      selectedDecoration: BoxDecoration(
+                          color: cbocPrimary, shape: BoxShape.circle),
+                      markerDecoration: BoxDecoration(
+                          color: cbocSecondary, shape: BoxShape.circle),
+                      markerSize: 5,
+                      markersMaxCount: 3,
+                    ),
+                  ),
+                ),
+
+                // ── DATE LABEL BAR ────────────────────────────────────────
+                Container(
+                  width: double.infinity,
+                  color: Colors.white,
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.event_note_rounded,
+                          size: 16, color: cbocPrimary),
+                      const SizedBox(width: 6),
+                      Text(
+                        selectedDay != null
+                            ? DateFormat('MMMM d, yyyy').format(selectedDay!)
+                            : DateFormat('MMMM yyyy').format(focusedDay),
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: cbocPrimary,
+                        ),
+                      ),
+                      if (selectedDay != null) ...[
+                        const Spacer(),
+                        GestureDetector(
+                          onTap: onDayCleared,
+                          child: const Text('Show all',
+                              style:
+                                  TextStyle(fontSize: 12, color: Colors.grey)),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                const Divider(height: 1),
+
+                // ── EVENT LIST ────────────────────────────────────────────
+                Expanded(
+                  child: isLoading
+                      ? const Center(
+                          child:
+                              CircularProgressIndicator(color: cbocPrimary))
+                      : nothingVisible
+                          ? Center(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.calendar_today_outlined,
+                                      size: 48,
+                                      color: Colors.grey.shade300),
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    selectedDay != null
+                                        ? 'No events on this day'
+                                        : 'No events this month',
+                                    style: TextStyle(
+                                        color: Colors.grey.shade400,
+                                        fontSize: 14),
+                                  ),
+                                ],
+                              ),
+                            )
+                          : ListView(
+                              padding:
+                                  const EdgeInsets.fromLTRB(12, 10, 12, 80),
+                              children: [
+                                // ── User's own pending / rejected events ──
+                                if (visibleMine.isNotEmpty) ...[
+                                  _sectionLabel(
+                                      Icons.person_pin_rounded,
+                                      'My Submitted Events'),
+                                  ...visibleMine.map(
+                                      (e) => _SubmittedEventCard(event: e)),
+                                  if (visibleApproved.isNotEmpty)
+                                    const Padding(
+                                      padding:
+                                          EdgeInsets.symmetric(vertical: 6),
+                                      child: Divider(),
+                                    ),
+                                ],
+
+                                // ── Approved public events ─────────────────
+                                if (visibleApproved.isNotEmpty) ...[
+                                  if (visibleMine.isNotEmpty)
+                                    _sectionLabel(
+                                        Icons.event_available_rounded,
+                                        'Upcoming Events'),
+                                  ...visibleApproved.map(
+                                    (item) => _EventCard(
+                                      item: item,
+                                      onTap: () => onEventTap(context, item),
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _sectionLabel(IconData icon, String label) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8, left: 2),
+      child: Row(
+        children: [
+          Icon(icon, size: 14, color: cbocPrimary),
+          const SizedBox(width: 5),
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: cbocPrimary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── SUBMITTED EVENT CARD (calendar tab) ──────────────────────────────────────
+// Shows user's pending / rejected / cancel_requested events with status badge
+// and a "Cancel Request" button for pending ones.
+
+class _SubmittedEventCard extends StatelessWidget {
+  final UserSubmittedEvent event;
+  const _SubmittedEventCard({required this.event});
+
+  Color get _color {
+    switch (event.status) {
+      case 'pending':
+        return Colors.orange;
+      case 'rejected':
+        return Colors.red.shade700;
+      case 'cancel_requested':
+        return Colors.blue.shade700;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  String get _label {
+    switch (event.status) {
+      case 'pending':
+        return 'Pending Review';
+      case 'rejected':
+        return 'Rejected';
+      case 'cancel_requested':
+        return 'Cancellation Requested';
+      default:
+        return event.status;
+    }
+  }
+
+  IconData get _icon {
+    switch (event.status) {
+      case 'pending':
+        return Icons.hourglass_empty_rounded;
+      case 'rejected':
+        return Icons.cancel_rounded;
+      case 'cancel_requested':
+        return Icons.pending_actions_rounded;
+      default:
+        return Icons.help_outline;
+    }
+  }
+
+  void _showCancelDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Cancel Submission',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+        content: Text(
+          'Are you sure you want to cancel "${event.title}"?\nThis action cannot be undone.',
+          style: const TextStyle(fontSize: 13, color: Colors.black87),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Keep It'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: cbocPrimary,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(30)),
+            ),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              final result =
+                  await BackendService.cancelPendingEvent(event.id);
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                content: Text(result.success
+                    ? 'Submission cancelled.'
+                    : result.message ?? 'Could not cancel.'),
+                backgroundColor:
+                    result.success ? Colors.green : Colors.red,
+                behavior: SnackBarBehavior.floating,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10)),
+              ));
+            },
+            child: const Text('Yes, Cancel',
+                style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _color.withOpacity(0.35), width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          // ── Main row ────────────────────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 14, 14, 10),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Date badge
+                Container(
+                  width: 48,
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  decoration: BoxDecoration(
+                    color: _color.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Column(
+                    children: [
+                      Text(
+                        DateFormat('MMM').format(event.date).toUpperCase(),
+                        style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: _color),
+                      ),
+                      Text(
+                        DateFormat('d').format(event.date),
+                        style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: _color),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                // Details + status badge
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              event.title,
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.bold, fontSize: 14),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          // Status badge
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 7, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: _color.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(_icon, size: 11, color: _color),
+                                const SizedBox(width: 3),
+                                Text(
+                                  _label,
+                                  style: TextStyle(
+                                      fontSize: 10,
+                                      color: _color,
+                                      fontWeight: FontWeight.w600),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          const Icon(Icons.location_on_outlined,
+                              size: 12, color: Colors.grey),
+                          const SizedBox(width: 3),
+                          Expanded(
+                            child: Text(
+                              event.venue,
+                              style: const TextStyle(
+                                  color: Colors.grey, fontSize: 12),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      Row(
+                        children: [
+                          const Icon(Icons.access_time,
+                              size: 12, color: Colors.grey),
+                          const SizedBox(width: 3),
+                          Text(
+                            '${event.startTime.format(context)} – ${event.endTime.format(context)}',
+                            style: const TextStyle(
+                                color: Colors.grey, fontSize: 12),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // ── Status footer bar ────────────────────────────────────────────
+          const Divider(height: 1),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 7, 8, 7),
+            child: Row(
+              children: [
+                Icon(_icon, size: 13, color: _color),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    event.status == 'pending'
+                        ? 'Awaiting admin approval'
+                        : event.status == 'rejected'
+                            ? 'This event was not approved by admin'
+                            : 'Cancellation pending admin approval',
+                    style: TextStyle(fontSize: 11, color: _color),
+                  ),
+                ),
+                // Show cancel button only for pending events
+                if (event.status == 'pending')
+                  TextButton.icon(
+                    onPressed: () => _showCancelDialog(context),
+                    icon: const Icon(Icons.close, size: 13),
+                    label: const Text('Cancel Request',
+                        style: TextStyle(fontSize: 11)),
+                    style: TextButton.styleFrom(
+                      foregroundColor: cbocPrimary,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── MY SUBMISSIONS TAB ────────────────────────────────────────────────────────
+
+class _MySubmissionsTab extends StatelessWidget {
+  const _MySubmissionsTab();
+
+  Color _statusColor(String status) {
+    switch (status) {
+      case 'approved':
+        return Colors.green;
+      case 'pending':
+        return Colors.orange;
+      case 'rejected':
+        return Colors.red.shade700;
+      case 'cancel_requested':
+        return Colors.blue.shade700;
+      case 'cancelled':
+        return Colors.grey;
+      default:
+        return Colors.orange;
+    }
+  }
+
+  String _statusLabel(String status) {
+    switch (status) {
+      case 'approved':
+        return 'Approved';
+      case 'pending':
+        return 'Pending Review';
+      case 'rejected':
+        return 'Rejected';
+      case 'cancel_requested':
+        return 'Cancellation Requested';
+      case 'cancelled':
+        return 'Cancelled';
+      default:
+        return 'Pending';
+    }
+  }
+
+  IconData _statusIcon(String status) {
+    switch (status) {
+      case 'approved':
+        return Icons.check_circle_rounded;
+      case 'pending':
+        return Icons.hourglass_empty_rounded;
+      case 'rejected':
+        return Icons.cancel_rounded;
+      case 'cancel_requested':
+        return Icons.pending_actions_rounded;
+      case 'cancelled':
+        return Icons.block_rounded;
+      default:
+        return Icons.hourglass_empty_rounded;
+    }
+  }
+
+  void _showEditDialog(BuildContext context, UserSubmittedEvent event) {
+    final titleCtrl = TextEditingController(text: event.title);
+    final venueCtrl = TextEditingController(text: event.venue);
+    final descCtrl = TextEditingController(text: event.description);
+    final posterCtrl = TextEditingController(text: event.posterUrl ?? '');
+    final slotsCtrl =
+        TextEditingController(text: event.availableSlots.toString());
+    DateTime selectedDate = event.date;
+    TimeOfDay startTime = event.startTime;
+    TimeOfDay endTime = event.endTime;
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          backgroundColor: Colors.grey.shade50,
+          title: const Text('Edit Event',
+              style: TextStyle(fontWeight: FontWeight.bold)),
+          content: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _editField(titleCtrl, 'Event Title'),
+                const SizedBox(height: 12),
+                _editField(venueCtrl, 'Venue'),
+                const SizedBox(height: 12),
+                _editField(descCtrl, 'Description', maxLines: 4),
+                const SizedBox(height: 12),
+                _editField(posterCtrl, 'Event Poster URL'),
+                const SizedBox(height: 16),
+                _tappableEditField(
+                  label: 'Date',
+                  value: DateFormat('MM/dd/yyyy').format(selectedDate),
+                  icon: Icons.calendar_today,
+                  onTap: () async {
+                    final picked = await showDatePicker(
+                      context: ctx,
+                      firstDate: DateTime.now(),
+                      lastDate: DateTime(2030),
+                      initialDate: selectedDate,
+                    );
+                    if (picked != null) {
+                      setDialogState(() => selectedDate = picked);
+                    }
+                  },
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _tappableEditField(
+                        label: 'Start Time',
+                        value: startTime.format(ctx),
+                        icon: Icons.access_time,
+                        onTap: () async {
+                          final picked = await showTimePicker(
+                              context: ctx, initialTime: startTime);
+                          if (picked != null) {
+                            setDialogState(() => startTime = picked);
+                          }
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _tappableEditField(
+                        label: 'End Time',
+                        value: endTime.format(ctx),
+                        icon: Icons.access_time,
+                        onTap: () async {
+                          final picked = await showTimePicker(
+                              context: ctx, initialTime: endTime);
+                          if (picked != null) {
+                            setDialogState(() => endTime = picked);
+                          }
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                _editField(slotsCtrl, 'Available Slots'),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogCtx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: cbocPrimary,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(30)),
+              ),
+              onPressed: () async {
+                final slots = int.tryParse(slotsCtrl.text.trim());
+                if (titleCtrl.text.trim().isEmpty ||
+                    venueCtrl.text.trim().isEmpty ||
+                    slots == null ||
+                    slots <= 0) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                        content: Text('Please fill in all fields correctly.')),
+                  );
+                  return;
+                }
+                final result = await BackendService.updatePendingEvent(
+                  eventId: event.id,
+                  title: titleCtrl.text.trim(),
+                  venue: venueCtrl.text.trim(),
+                  description: descCtrl.text.trim(),
+                  date: selectedDate,
+                  start: startTime,
+                  end: endTime,
+                  posterUrl: posterCtrl.text.trim().isEmpty
+                      ? null
+                      : posterCtrl.text.trim(),
+                  availableSlots: slots,
+                );
+                Navigator.pop(dialogCtx);
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                  content: Text(result.success
+                      ? 'Event updated successfully.'
+                      : result.message ?? 'Failed to update event.'),
+                  backgroundColor:
+                      result.success ? Colors.green : Colors.red,
+                  behavior: SnackBarBehavior.floating,
+                ));
+              },
+              child: const Text('Save Changes',
+                  style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _editField(TextEditingController ctrl, String label,
+      {int maxLines = 1}) {
+    return TextField(
+      controller: ctrl,
+      maxLines: maxLines,
+      decoration: InputDecoration(
+        labelText: label,
+        filled: true,
+        fillColor: Colors.white,
+        border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+            borderSide: BorderSide.none),
+      ),
+    );
+  }
+
+  Widget _tappableEditField({
+    required String label,
+    required String value,
+    required IconData icon,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AbsorbPointer(
+        child: TextField(
+          readOnly: true,
+          controller: TextEditingController(text: value),
+          decoration: InputDecoration(
+            labelText: label,
+            filled: true,
+            fillColor: Colors.white,
+            suffixIcon: Icon(icon),
+            border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: BorderSide.none),
+          ),
+        ),
+      ),
+    );
+  }
+
+    void _showCancelDialog(BuildContext context, UserSubmittedEvent event) {
+    final bool isPending = event.status == 'pending';
+    final reasonCtrl = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(
+          isPending ? 'Cancel Event Submission' : 'Request Cancellation',
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              isPending
+                  ? 'Are you sure you want to cancel "${event.title}"? This action cannot be undone.'
+                  : 'This event has been approved. Cancellation requires admin approval. Attendees will be notified once approved.',
+              style: const TextStyle(fontSize: 13, color: Colors.black87),
+            ),
+            if (!isPending) ...[
+              const SizedBox(height: 12),
+              TextField(
+                controller: reasonCtrl,
+                maxLines: 3,
+                decoration: InputDecoration(
+                  labelText: 'Reason for cancellation',
+                  filled: true,
+                  fillColor: Colors.grey.shade100,
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none),
+                ),
+              ),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Keep Event'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: cbocPrimary,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(30)),
+            ),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              if (isPending) {
+                final result =
+                    await BackendService.cancelPendingEvent(event.id);
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                  content: Text(result.success
+                      ? 'Event submission cancelled.'
+                      : result.message ?? 'Error cancelling event.'),
+                ));
+              } else {
+                if (reasonCtrl.text.trim().isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                        content: Text('Please provide a reason.')),
+                  );
+                  return;
+                }
+                final result = await BackendService.requestEventCancellation(
+                    event.id, reasonCtrl.text.trim());
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                  content: Text(result.success
+                      ? 'Cancellation request submitted for admin review.'
+                      : result.message ?? 'Error submitting request.'),
+                ));
+              }
+            },
+            child: Text(
+              isPending ? 'Yes, Cancel' : 'Submit Request',
+              style: const TextStyle(color: Colors.white),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<List<UserSubmittedEvent>>(
+      stream: BackendService.mySubmittedEventsStream(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(
+              child: CircularProgressIndicator(color: cbocPrimary));
+        }
+
+        final events = snapshot.data ?? [];
+        if (events.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.event_busy_rounded,
+                    size: 52, color: Colors.grey.shade300),
+                const SizedBox(height: 12),
+                Text(
+                  'You haven\'t submitted any events yet.',
+                  style:
+                      TextStyle(color: Colors.grey.shade400, fontSize: 14),
+                ),
+              ],
+            ),
+          );
+        }
+
+        return ListView.builder(
+          padding: const EdgeInsets.fromLTRB(12, 14, 12, 80),
+          itemCount: events.length,
+          itemBuilder: (_, i) {
+            final event = events[i];
+            final isPast = event.date.isBefore(
+                DateTime.now().subtract(const Duration(days: 1)));
+            final canCancel = event.status == 'pending' ||
+                (event.status == 'approved' && !isPast);
+            final canEdit = event.status == 'pending';
+            final statusColor = _statusColor(event.status);
+
+            return Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(14),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.04),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(event.title,
+                            style: const TextStyle(
+                                fontWeight: FontWeight.bold, fontSize: 14)),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: statusColor.withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(_statusIcon(event.status),
+                                size: 12, color: statusColor),
+                            const SizedBox(width: 4),
+                            Text(
+                              _statusLabel(event.status),
+                              style: TextStyle(
+                                  fontSize: 11,
+                                  color: statusColor,
+                                  fontWeight: FontWeight.w600),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      const Icon(Icons.calendar_today_outlined,
+                          size: 12, color: Colors.grey),
+                      const SizedBox(width: 4),
+                      Text(
+                        DateFormat('MMM d, yyyy').format(event.date),
+                        style: const TextStyle(
+                            fontSize: 12, color: Colors.grey),
+                      ),
+                      const SizedBox(width: 12),
+                      const Icon(Icons.location_on_outlined,
+                          size: 12, color: Colors.grey),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          event.venue,
+                          style: const TextStyle(
+                              fontSize: 12, color: Colors.grey),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (event.status == 'pending') ...[
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.info_outline,
+                              size: 13, color: Colors.orange),
+                          SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              'Awaiting admin approval. You can cancel this submission.',
+                              style:
+                                  TextStyle(fontSize: 11, color: Colors.orange),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  if (event.status == 'cancel_requested') ...[
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.pending_actions,
+                              size: 13, color: Colors.blue),
+                          SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              'Cancellation pending admin approval.',
+                              style:
+                                  TextStyle(fontSize: 11, color: Colors.blue),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  // ── Action buttons ──────────────────────────────
+                  if (canEdit || canCancel) ...[
+                    const SizedBox(height: 10),
+                    const Divider(height: 1),
+                    const SizedBox(height: 6),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        // Edit button — only for pending events
+                        if (canEdit)
+                          TextButton.icon(
+                            onPressed: () =>
+                                _showEditDialog(context, event),
+                            icon: const Icon(Icons.edit_outlined, size: 14),
+                            label: const Text('Edit Event',
+                                style: TextStyle(fontSize: 12)),
+                            style: TextButton.styleFrom(
+                              foregroundColor: Colors.blue.shade700,
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 4),
+                            ),
+                          ),
+                        // Cancel button — guarded by canCancel
+                        if (canCancel)
+                          TextButton.icon(
+                            onPressed: () =>
+                                _showCancelDialog(context, event),
+                            icon: const Icon(Icons.close, size: 14),
+                            label: Text(
+                              event.status == 'pending'
+                                  ? 'Cancel Submission'
+                                  : 'Request Cancellation',
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                            style: TextButton.styleFrom(
+                              foregroundColor: cbocPrimary,
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 4),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+// ── APPROVED EVENT CARD ───────────────────────────────────────────────────────
 
 class _EventCard extends StatelessWidget {
   final UpcomingEvent item;
@@ -508,14 +1467,51 @@ class _EventCard extends StatelessWidget {
 
 // ── EVENT DETAIL BOTTOM SHEET ─────────────────────────────────────────────────
 
-class _EventDetailSheet extends StatelessWidget {
+class _EventDetailSheet extends StatefulWidget {
   final UpcomingEvent item;
   const _EventDetailSheet({required this.item});
 
   @override
+  State<_EventDetailSheet> createState() => _EventDetailSheetState();
+}
+
+class _EventDetailSheetState extends State<_EventDetailSheet> {
+  bool _isAttending = false;
+  bool _loading = true;
+  bool _rsvpInProgress = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkAttendance();
+  }
+
+  Future<void> _checkAttendance() async {
+    final attending = await BackendService.isAttendingEvent(widget.item.id);
+    if (mounted) setState(() { _isAttending = attending; _loading = false; });
+  }
+
+  Future<void> _handleAttend() async {
+    if (_isAttending) return;
+    setState(() => _rsvpInProgress = true);
+    final result = await BackendService.attendEvent(upcomingEvent: widget.item);
+    if (mounted) {
+      setState(() {
+        _rsvpInProgress = false;
+        if (result.success) _isAttending = true;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(result.success
+            ? 'You\'re attending "${widget.item.event.title}"!'
+            : result.message ?? 'Could not RSVP at this time.'),
+      ));
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final e = item.event;
-    final dateStr = DateFormat('EEEE, MMMM d, yyyy').format(item.date);
+    final e = widget.item.event;
+    final dateStr = DateFormat('EEEE, MMMM d, yyyy').format(widget.item.date);
     final timeStr =
         '${e.startTime.format(context)}  –  ${e.endTime.format(context)}';
 
@@ -543,13 +1539,11 @@ class _EventDetailSheet extends StatelessWidget {
                   ClipRRect(
                     borderRadius: const BorderRadius.vertical(
                         top: Radius.circular(24)),
-                    child: Image.network(
-                      e.imageUrl!,
-                      height: 200,
-                      width: double.infinity,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => const SizedBox(),
-                    ),
+                    child: Image.network(e.imageUrl!,
+                        height: 200,
+                        width: double.infinity,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => const SizedBox()),
                   )
                 else
                   Container(
@@ -580,28 +1574,24 @@ class _EventDetailSheet extends StatelessWidget {
                               color: Color(0xFF1A1A1A))),
                       const SizedBox(height: 16),
                       _infoRow(
-                        icon: Icons.calendar_today_rounded,
-                        label: 'Date',
-                        value: dateStr,
-                      ),
+                          icon: Icons.calendar_today_rounded,
+                          label: 'Date',
+                          value: dateStr),
                       const SizedBox(height: 10),
                       _infoRow(
-                        icon: Icons.access_time_rounded,
-                        label: 'Time',
-                        value: timeStr,
-                      ),
+                          icon: Icons.access_time_rounded,
+                          label: 'Time',
+                          value: timeStr),
                       const SizedBox(height: 10),
                       _infoRow(
-                        icon: Icons.location_on_rounded,
-                        label: 'Venue',
-                        value: e.venue,
-                      ),
+                          icon: Icons.location_on_rounded,
+                          label: 'Venue',
+                          value: e.venue),
                       const SizedBox(height: 10),
                       _infoRow(
-                        icon: Icons.event_seat_rounded,
-                        label: 'Available Slots',
-                        value: item.availableSlots.toString(),
-                      ),
+                          icon: Icons.event_seat_rounded,
+                          label: 'Available Slots',
+                          value: widget.item.availableSlots.toString()),
                       const SizedBox(height: 20),
                       const Divider(),
                       const SizedBox(height: 12),
@@ -623,21 +1613,48 @@ class _EventDetailSheet extends StatelessWidget {
                       const SizedBox(height: 30),
                       SizedBox(
                         width: double.infinity,
-                        child: ElevatedButton(
-                          onPressed: () => Navigator.pop(context),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: cbocAccent,
-                            minimumSize:
-                                const Size(double.infinity, 48),
-                            shape: RoundedRectangleBorder(
-                                borderRadius:
-                                    BorderRadius.circular(12)),
-                          ),
-                          child: const Text('Attend Event',
-                              style: TextStyle(
-                                  color: cbocPrimary,
-                                  fontWeight: FontWeight.bold)),
-                        ),
+                        child: _loading
+                            ? const Center(
+                                child: CircularProgressIndicator(
+                                    color: cbocPrimary))
+                            : ElevatedButton.icon(
+                                onPressed:
+                                    _isAttending || _rsvpInProgress
+                                        ? null
+                                        : _handleAttend,
+                                icon: _rsvpInProgress
+                                    ? const SizedBox(
+                                        width: 16,
+                                        height: 16,
+                                        child: CircularProgressIndicator(
+                                            color: cbocPrimary,
+                                            strokeWidth: 2))
+                                    : Icon(
+                                        _isAttending
+                                            ? Icons.check_circle_rounded
+                                            : Icons.event_available_rounded,
+                                        color: cbocPrimary),
+                                label: Text(
+                                  _isAttending
+                                      ? 'You\'re Attending!'
+                                      : 'Attend Event',
+                                  style: const TextStyle(
+                                      color: cbocPrimary,
+                                      fontWeight: FontWeight.bold),
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: _isAttending
+                                      ? Colors.green.shade50
+                                      : cbocAccent,
+                                  minimumSize:
+                                      const Size(double.infinity, 48),
+                                  shape: RoundedRectangleBorder(
+                                      borderRadius:
+                                          BorderRadius.circular(12)),
+                                  disabledBackgroundColor:
+                                      Colors.green.shade50,
+                                ),
+                              ),
                       ),
                     ],
                   ),
@@ -660,9 +1677,7 @@ class _EventDetailSheet extends StatelessWidget {
         Container(
           padding: const EdgeInsets.all(7),
           decoration: BoxDecoration(
-            color: cbocAccent,
-            borderRadius: BorderRadius.circular(8),
-          ),
+              color: cbocAccent, borderRadius: BorderRadius.circular(8)),
           child: Icon(icon, size: 16, color: cbocPrimary),
         ),
         const SizedBox(width: 12),
