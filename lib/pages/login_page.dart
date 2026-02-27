@@ -15,7 +15,6 @@ class _LoginPageState extends State<LoginPage> {
   final TextEditingController _passwordController = TextEditingController();
 
   bool _rememberMe = false;
-  bool _isHovering = false;
   bool _isLoading = false;
   String? _errorMessage;
 
@@ -26,9 +25,6 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
-  /// ===============================
-  /// UI toBACKEND HANDOFF ONLY
-  /// ===============================
   Future<void> _loginUser() async {
     setState(() {
       _isLoading = true;
@@ -36,7 +32,7 @@ class _LoginPageState extends State<LoginPage> {
     });
 
     final result = await BackendService.login(
-      username: _emailController.text.trim(),
+      email: _emailController.text.trim(),
       password: _passwordController.text.trim(),
     );
 
@@ -52,6 +48,46 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
+  Future<void> _handleGoogleSignIn() async {
+    setState(() => _isLoading = true);
+
+    final googleProvider = GoogleSignInProvider();
+    final result = await googleProvider.signInWithGoogle();
+
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+
+    if (result == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Google sign-in failed.")),
+      );
+      return;
+    }
+
+    // Check if user already has a completed profile/approval
+    final profileExists = await BackendService.checkUserProfileExists(result.uid);
+
+    if (!mounted) return;
+
+    if (profileExists == ProfileStatus.approvedExists) {
+      Navigator.pushReplacementNamed(context, '/home');
+    } else if (profileExists == ProfileStatus.pendingApproval) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Your account is pending admin approval.")),
+      );
+    } else {
+      // New Google user — show registration form
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => RegisterPage(
+            googleUser: result,
+          ),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -63,10 +99,7 @@ class _LoginPageState extends State<LoginPage> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               // Logo
-              Image.asset(
-                'assets/logo.png',
-                height: 100,
-              ),
+              Image.asset('assets/logo.png', height: 100),
               const SizedBox(height: 20),
 
               // Title
@@ -80,7 +113,7 @@ class _LoginPageState extends State<LoginPage> {
               ),
               const SizedBox(height: 40),
 
-              // Username / Email
+              // Email
               TextField(
                 controller: _emailController,
                 decoration: InputDecoration(
@@ -115,20 +148,15 @@ class _LoginPageState extends State<LoginPage> {
                     children: [
                       Checkbox(
                         value: _rememberMe,
-                        onChanged: (value) {
-                          setState(() {
-                            _rememberMe = value ?? false;
-                          });
-                        },
+                        onChanged: (value) =>
+                            setState(() => _rememberMe = value ?? false),
                         activeColor: const Color(0xFFD32F2F),
                       ),
                       const Text("Remember Me"),
                     ],
                   ),
                   TextButton(
-                    onPressed: () {
-                      // UI placeholder only
-                    },
+                    onPressed: () {},
                     child: const Text(
                       "Forgot Password?",
                       style: TextStyle(color: Colors.red),
@@ -139,12 +167,13 @@ class _LoginPageState extends State<LoginPage> {
               const SizedBox(height: 20),
 
               // Error Message
-              if (_errorMessage != null)
+              if (_errorMessage != null) ...[
                 Text(
                   _errorMessage!,
                   style: const TextStyle(color: Colors.red),
                 ),
-              if (_errorMessage != null) const SizedBox(height: 10),
+                const SizedBox(height: 10),
+              ],
 
               // Login Button
               _isLoading
@@ -177,7 +206,7 @@ class _LoginPageState extends State<LoginPage> {
                     Flexible(child: Divider(thickness: 1)),
                     Padding(
                       padding: EdgeInsets.symmetric(horizontal: 8),
-                      child: Text("OR SIGN IN WITH"),
+                      child: Text("OR"),
                     ),
                     Flexible(child: Divider(thickness: 1)),
                   ],
@@ -185,36 +214,18 @@ class _LoginPageState extends State<LoginPage> {
               ),
               const SizedBox(height: 20),
 
-              // Google Sign-In (still UI-level trigger)
+              // Google Sign-In
               OutlinedButton(
                 style: OutlinedButton.styleFrom(
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(30),
                   ),
                   side: const BorderSide(color: Colors.grey),
-                  padding: const EdgeInsets.symmetric(
-                    vertical: 12,
-                    horizontal: 20,
-                  ),
+                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
                   backgroundColor: Colors.white,
                   minimumSize: const Size(double.infinity, 50),
                 ),
-                onPressed: () async {
-                  final googleProvider = GoogleSignInProvider();
-                  final user = await googleProvider.signInWithGoogle();
-
-                  if (!mounted) return;
-
-                  if (user != null) {
-                    Navigator.pushReplacementNamed(context, '/home');
-                  } else {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text("Google sign-in failed."),
-                      ),
-                    );
-                  }
-                },
+                onPressed: _isLoading ? null : _handleGoogleSignIn,
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -231,38 +242,34 @@ class _LoginPageState extends State<LoginPage> {
                   ],
                 ),
               ),
+              const SizedBox(height: 16),
 
-              const SizedBox(height: 30),
-
-              // Disabled Register Text
-              // Registration Button
-              Padding(
-                padding: const EdgeInsets.only(top: 20),
-                child: OutlinedButton(
-                  style: OutlinedButton.styleFrom(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    side: const BorderSide(color: Color(0xFFD32F2F)),
-                    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
-                    backgroundColor: Colors.white,
-                    minimumSize: const Size(double.infinity, 50),
+              // Register via Google
+              OutlinedButton(
+                style: OutlinedButton.styleFrom(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
                   ),
-                  onPressed: () {
-                    // Navigate to the new RegisterPage
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const RegisterPage()),
-                    );
-                  },
-                  child: const Text(
-                    "Register an Account",
-                    style: TextStyle(
-                      color: Color(0xFFD32F2F),
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
+                  side: const BorderSide(color: Color(0xFFD32F2F)),
+                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
+                  backgroundColor: Colors.white,
+                  minimumSize: const Size(double.infinity, 50),
+                ),
+                onPressed: _isLoading ? null : _handleGoogleSignIn,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Image.asset('assets/google_logo.png', height: 22),
+                    const SizedBox(width: 12),
+                    const Text(
+                      "Register / Sign Up using Google Account",
+                      style: TextStyle(
+                        color: Color(0xFFD32F2F),
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                  ),
+                  ],
                 ),
               ),
             ],

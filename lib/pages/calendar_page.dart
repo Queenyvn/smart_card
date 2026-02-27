@@ -305,9 +305,11 @@ class _CalendarPageState extends State<CalendarPage>
   }
 }
 
-// ── EVENTS TAB ─────────────────────────────────────────────────────────────────
+//=================================================================================
+// EVENTS TAB
 // Shows ALL approved events + the user's own pending/rejected submissions on the
 // same calendar view, clearly labelled with status badges.
+//=================================================================================
 
 class _EventsTab extends StatelessWidget {
   final DateTime focusedDay;
@@ -387,7 +389,9 @@ class _EventsTab extends StatelessWidget {
 
             return Column(
               children: [
-                // ── CALENDAR ─────────────────────────────────────────────
+                //===================================================
+                //CALENDAR
+                //===================================================
                 Container(
                   color: Colors.white,
                   child: TableCalendar(
@@ -429,7 +433,9 @@ class _EventsTab extends StatelessWidget {
                   ),
                 ),
 
-                // ── DATE LABEL BAR ────────────────────────────────────────
+                //================================================================
+                // DATE LABEL BAR
+                //================================================================
                 Container(
                   width: double.infinity,
                   color: Colors.white,
@@ -463,7 +469,9 @@ class _EventsTab extends StatelessWidget {
                 ),
                 const Divider(height: 1),
 
-                // ── EVENT LIST ────────────────────────────────────────────
+                //=====================================================================
+                // EVENT LIST
+                //=====================================================================
                 Expanded(
                   child: isLoading
                       ? const Center(
@@ -493,7 +501,9 @@ class _EventsTab extends StatelessWidget {
                               padding:
                                   const EdgeInsets.fromLTRB(12, 10, 12, 80),
                               children: [
-                                // ── User's own pending / rejected events ──
+                                //=====================================================================
+                                // USER'S SUBMITTED EVENTS | own pending / rejected events
+                                //=====================================================================
                                 if (visibleMine.isNotEmpty) ...[
                                   _sectionLabel(
                                       Icons.person_pin_rounded,
@@ -508,7 +518,9 @@ class _EventsTab extends StatelessWidget {
                                     ),
                                 ],
 
-                                // ── Approved public events ─────────────────
+                                //==============================================================================
+                                // APPROVED EVENTS
+                                //==============================================================================
                                 if (visibleApproved.isNotEmpty) ...[
                                   if (visibleMine.isNotEmpty)
                                     _sectionLabel(
@@ -553,9 +565,11 @@ class _EventsTab extends StatelessWidget {
   }
 }
 
-// ── SUBMITTED EVENT CARD (calendar tab) ──────────────────────────────────────
+//===================================================================================================
+// SUBMITTED EVENT CARD (calendar tab)
 // Shows user's pending / rejected / cancel_requested events with status badge
 // and a "Cancel Request" button for pending ones.
+//===================================================================================================
 
 class _SubmittedEventCard extends StatelessWidget {
   final UserSubmittedEvent event;
@@ -664,7 +678,9 @@ class _SubmittedEventCard extends StatelessWidget {
       ),
       child: Column(
         children: [
-          // ── Main row ────────────────────────────────────────────────────
+          //=================================================================
+          // MAIN ROW
+          //=================================================================
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 14, 14, 10),
             child: Row(

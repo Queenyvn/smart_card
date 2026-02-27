@@ -16,6 +16,18 @@ class BackendResult {
 }
 
 /// ========================================================
+/// PROFILE STATUS (used by login to decide next screen)
+/// ========================================================
+enum ProfileStatus {
+  /// No Firestore document — brand-new Google user
+  notFound,
+  /// Document exists but waiting for admin to approve
+  pendingApproval,
+  /// Fully approved and active
+  approvedExists,
+}
+
+/// ========================================================
 /// CALENDAR MODELS
 /// ========================================================
 class CalendarEvent {
@@ -62,7 +74,7 @@ class UserSubmittedEvent {
   final DateTime date;
   final TimeOfDay startTime;
   final TimeOfDay endTime;
-  final String status; // 'pending', 'approved', 'rejected', 'cancel_requested', 'cancelled'
+  final String status;
   final int availableSlots;
   final String? posterUrl;
 
@@ -163,7 +175,7 @@ class PostComment {
 /// ========================================================
 class AppNotification {
   final String id;
-  final String type; // 'new_event', 'event_approved', 'event_cancelled', 'cancel_requested'
+  final String type;
   final String title;
   final String body;
   final String? eventId;
@@ -191,47 +203,44 @@ class BackendService {
   static List<CalendarEvent> getEventsForDay(DateTime day) => [];
 
   // =========================================================
-  // LOGIN
+  // CHECK USER PROFILE STATUS (used after Google Sign-In)
+  // =========================================================
+  static Future<ProfileStatus> checkUserProfileExists(String uid) async {
+    try {
+      final doc = await _firestore.collection('users').doc(uid).get();
+      if (!doc.exists) return ProfileStatus.notFound;
+      final data = doc.data();
+      if (data == null) return ProfileStatus.notFound;
+      if (data['approved'] == true) return ProfileStatus.approvedExists;
+      return ProfileStatus.pendingApproval;
+    } catch (e) {
+      return ProfileStatus.notFound;
+    }
+  }
+
+  // =========================================================
+  // LOGIN (email + password)
+  //
+  // Supports two account types:
+  //   1. Pure email/password accounts
+  //   2. Google accounts that also linked email/password
+  //      (authProvider == 'google') — these are auto email-verified
+  //      so we skip the emailVerified check for them.
   // =========================================================
   static Future<BackendResult> login({
-    required String username,
+    required String email,
     required String password,
   }) async {
-    if (kDebugMode) {
-      if (username == 'dev' && password == 'dev') {
-        await Future.delayed(const Duration(milliseconds: 500));
-        return BackendResult(success: true);
-      }
-      return BackendResult(
-          success: false,
-          message: 'DEV MODE: use username: dev, password: dev');
-    }
-
     try {
-      String emailToUse = username.trim();
-
-      if (!username.contains('@')) {
-        final querySnapshot = await _firestore
-            .collection('users')
-            .where('username', isEqualTo: username.trim())
-            .limit(1)
-            .get();
-
-        if (querySnapshot.docs.isEmpty) {
-          return BackendResult(success: false, message: "Username not found.");
-        }
-        emailToUse = querySnapshot.docs.first.data()['email'];
-      }
-
       final userCredential = await _auth.signInWithEmailAndPassword(
-        email: emailToUse,
+        email: email.trim(),
         password: password.trim(),
       );
 
-      final userDoc = await _firestore
-          .collection('users')
-          .doc(userCredential.user!.uid)
-          .get();
+      final user = userCredential.user!;
+
+      // Fetch Firestore profile first
+      final userDoc = await _firestore.collection('users').doc(user.uid).get();
 
       if (!userDoc.exists) {
         await _auth.signOut();
@@ -241,8 +250,22 @@ class BackendService {
         );
       }
 
-      final userData = userDoc.data();
-      if (userData == null || userData['approved'] != true) {
+      final userData = userDoc.data()!;
+      final isGoogleAccount = userData['authProvider'] == 'google';
+
+      // Google-linked accounts are inherently verified.
+      // Only enforce email verification for pure email/password accounts.
+      if (!isGoogleAccount && !user.emailVerified) {
+        await _auth.signOut();
+        return BackendResult(
+          success: false,
+          message:
+              "Email not verified. Please check your inbox and verify your email before logging in.",
+        );
+      }
+
+      // Check admin approval
+      if (userData['approved'] != true) {
         await _auth.signOut();
         return BackendResult(
             success: false, message: "Account not yet approved by admin.");
@@ -278,84 +301,64 @@ class BackendService {
   }
 
   // =========================================================
-  // REGISTRATION
+  // REGISTER GOOGLE USER FOR APPROVAL
+  // The user is already authenticated via Google at this point.
+  // We link email+password so they can also log in that way,
+  // then save their profile details + OR document to Firestore.
   // =========================================================
-  static Future<BackendResult> registerUserForApproval({
-    required String username,
-    required String email,
+  static Future<BackendResult> registerGoogleUserForApproval({
+    required User googleUser,
+    required String name,
     required String password,
     required String address,
     required String userType,
     String? businessName,
     String? businessNature,
     String? professionalTitle,
-    Uint8List? dtiFileBytes,
-    String? dtiFileName,
+    Uint8List? orFileBytes,
+    String? orFileName,
   }) async {
     try {
-      final usernameCheck = await _firestore
-          .collection('users')
-          .where('username', isEqualTo: username.trim())
-          .limit(1)
-          .get();
-
-      if (usernameCheck.docs.isNotEmpty) {
-        return BackendResult(
-            success: false,
-            message: "Username already taken. Please choose another.");
+      // Link email+password credential to the existing Google account
+      // so the user can also log in with email/password in the future.
+      try {
+        final emailCred = EmailAuthProvider.credential(
+          email: googleUser.email!,
+          password: password.trim(),
+        );
+        await googleUser.linkWithCredential(emailCred);
+      } catch (e) {
+        // If linking fails (e.g. credential already linked), we still proceed.
       }
 
-      final userCredential = await _auth.createUserWithEmailAndPassword(
-        email: email.trim(),
-        password: password.trim(),
-      );
-
-      String? dtiUrl;
-      if (dtiFileBytes != null && dtiFileName != null) {
+      // Upload OR document if provided
+      String? orUrl;
+      if (orFileBytes != null && orFileName != null) {
         try {
-          dtiUrl = await _uploadToCloudinary(dtiFileBytes, dtiFileName);
+          orUrl = await _uploadToCloudinary(orFileBytes, orFileName,
+              folder: 'or_documents', resourceType: 'raw');
         } catch (e) {
-          await userCredential.user!.delete();
           return BackendResult(
               success: false,
-              message: "Failed to upload DTI document: ${e.toString()}");
+              message: "Failed to upload OR document: ${e.toString()}");
         }
       }
 
-      await _firestore
-          .collection('users')
-          .doc(userCredential.user!.uid)
-          .set({
-        'username': username.trim(),
-        'email': email.trim(),
+      await _firestore.collection('users').doc(googleUser.uid).set({
+        'name': name.trim(),
+        'email': googleUser.email,
         'address': address.trim(),
         'userType': userType,
         'businessName': businessName?.trim(),
         'businessNature': businessNature?.trim(),
-        'professionalTitle': professionalTitle?.trim(),
-        'dtiDocumentUrl': dtiUrl,
-        'dtiFileName': dtiFileName,
+        'orDocumentUrl': orUrl,
+        'orFileName': orFileName,
         'approved': false,
+        'authProvider': 'google',
         'createdAt': FieldValue.serverTimestamp(),
       });
 
       return BackendResult(success: true);
-    } on FirebaseAuthException catch (e) {
-      String message;
-      switch (e.code) {
-        case 'email-already-in-use':
-          message = "This email is already registered.";
-          break;
-        case 'invalid-email':
-          message = "Invalid email format.";
-          break;
-        case 'weak-password':
-          message = "Password is too weak.";
-          break;
-        default:
-          message = "Registration failed: ${e.message}";
-      }
-      return BackendResult(success: false, message: message);
     } catch (e) {
       return BackendResult(
           success: false, message: "An error occurred: ${e.toString()}");
@@ -391,7 +394,7 @@ class BackendService {
       'endHour': end.hour,
       'endMinute': end.minute,
       'approved': false,
-      'status': 'pending', // 'pending', 'approved', 'rejected', 'cancel_requested', 'cancelled'
+      'status': 'pending',
       'createdBy': user.uid,
       'createdAt': FieldValue.serverTimestamp(),
       'availableSlots': availableSlots,
@@ -401,7 +404,7 @@ class BackendService {
   }
 
   // =========================================================
-  // UPDATE PENDING EVENT (edit before admin approval)
+  // UPDATE PENDING EVENT
   // =========================================================
   static Future<BackendResult> updatePendingEvent({
     required String eventId,
@@ -427,8 +430,7 @@ class BackendService {
       }
       if (data['approved'] == true) {
         return BackendResult(
-            success: false,
-            message: 'Cannot edit an already approved event.');
+            success: false, message: 'Cannot edit an already approved event.');
       }
 
       final normalizedDate = DateTime(date.year, date.month, date.day);
@@ -454,11 +456,7 @@ class BackendService {
   }
 
   // =========================================================
-  // UPDATE PENDING EVENT (edit before admin approval)
-  // =========================================================
-
-  // =========================================================
-  // CANCEL PENDING EVENT (user-initiated, not yet approved)
+  // CANCEL PENDING EVENT
   // =========================================================
   static Future<BackendResult> cancelPendingEvent(String eventId) async {
     try {
@@ -474,7 +472,8 @@ class BackendService {
       }
       if (data['approved'] == true) {
         return BackendResult(
-            success: false, message: 'Event is already approved. Use request cancellation instead.');
+            success: false,
+            message: 'Event is already approved. Use request cancellation instead.');
       }
 
       await _firestore.collection('events').doc(eventId).update({
@@ -489,7 +488,7 @@ class BackendService {
   }
 
   // =========================================================
-  // REQUEST CANCELLATION (for approved events — needs admin approval)
+  // REQUEST CANCELLATION (approved events)
   // =========================================================
   static Future<BackendResult> requestEventCancellation(
       String eventId, String reason) async {
@@ -511,7 +510,6 @@ class BackendService {
         'cancelRequestedAt': FieldValue.serverTimestamp(),
       });
 
-      // Notify admins (stored in a separate admin_notifications collection)
       await _firestore.collection('admin_notifications').add({
         'type': 'cancel_request',
         'eventId': eventId,
@@ -538,21 +536,18 @@ class BackendService {
 
       final data = doc.data()!;
 
-      // Mark event as cancelled
       await _firestore.collection('events').doc(eventId).update({
         'status': 'cancelled',
         'approved': false,
         'cancelledAt': FieldValue.serverTimestamp(),
       });
 
-      // Fetch all RSVPed users for this event
       final attendees = await _firestore
           .collection('event_attendance')
           .where('eventId', isEqualTo: eventId)
           .where('status', isEqualTo: 'attending')
           .get();
 
-      // Send in-app notification to each attendee
       final batch = _firestore.batch();
       for (final attendee in attendees.docs) {
         final attendeeUid = attendee.data()['uid'] as String?;
@@ -599,8 +594,7 @@ class BackendService {
             venue: d['venue'],
             description: d['description'],
             imageUrl: d['imageUrl'],
-            startTime:
-                TimeOfDay(hour: d['startHour'], minute: d['startMinute']),
+            startTime: TimeOfDay(hour: d['startHour'], minute: d['startMinute']),
             endTime: TimeOfDay(hour: d['endHour'], minute: d['endMinute']),
             approved: true,
           ),
@@ -610,9 +604,7 @@ class BackendService {
   }
 
   // =========================================================
-  // USER'S OWN SUBMITTED EVENTS (with status)
-  // No orderBy to avoid requiring a composite Firestore index.
-  // Sorting is done client-side by createdAt descending.
+  // USER'S OWN SUBMITTED EVENTS
   // =========================================================
   static Stream<List<UserSubmittedEvent>> mySubmittedEventsStream() {
     final uid = _auth.currentUser?.uid;
@@ -621,20 +613,14 @@ class BackendService {
     return _firestore
         .collection('events')
         .where('createdBy', isEqualTo: uid)
-        // ⚠️ No .orderBy() here — avoids Firestore composite index requirement.
-        // We sort client-side below instead.
         .snapshots()
         .map((snapshot) {
       final results = snapshot.docs.map((doc) {
         final d = doc.data();
-
-        // Safely parse date — skip doc if date is missing
         final rawDate = d['date'];
         if (rawDate == null) return null;
         final date = (rawDate as Timestamp).toDate();
 
-        // Derive status: if approved flag is true but status is still 'pending',
-        // treat it as approved (handles legacy docs without status field)
         String status = d['status'] as String? ?? 'pending';
         if (d['approved'] == true && status == 'pending') status = 'approved';
 
@@ -644,24 +630,21 @@ class BackendService {
           venue: d['venue'] ?? '',
           description: d['description'] ?? '',
           date: date,
-          startTime: TimeOfDay(
-              hour: d['startHour'] ?? 0, minute: d['startMinute'] ?? 0),
-          endTime: TimeOfDay(
-              hour: d['endHour'] ?? 0, minute: d['endMinute'] ?? 0),
+          startTime: TimeOfDay(hour: d['startHour'] ?? 0, minute: d['startMinute'] ?? 0),
+          endTime: TimeOfDay(hour: d['endHour'] ?? 0, minute: d['endMinute'] ?? 0),
           status: status,
           availableSlots: (d['availableSlots'] as num?)?.toInt() ?? 0,
           posterUrl: d['imageUrl'],
         );
       }).whereType<UserSubmittedEvent>().toList();
 
-      // Sort client-side: newest first using the event date as fallback
       results.sort((a, b) => b.date.compareTo(a.date));
       return results;
     });
   }
 
   // =========================================================
-  // USER NOTIFICATION STREAM (in-app notifications)
+  // USER NOTIFICATION STREAM
   // =========================================================
   static Stream<List<AppNotification>> userNotificationsStream() {
     final uid = _auth.currentUser?.uid;
@@ -690,11 +673,9 @@ class BackendService {
   }
 
   // =========================================================
-  // STREAM: NEWLY APPROVED EVENTS (for banner notifications)
-  // Shows events approved within the last 7 days
+  // RECENTLY APPROVED EVENTS STREAM
   // =========================================================
   static Stream<List<UpcomingEvent>> recentlyApprovedEventsStream() {
-    final sevenDaysAgo = DateTime.now().subtract(const Duration(days: 7));
     return _firestore
         .collection('events')
         .where('approved', isEqualTo: true)
@@ -729,7 +710,10 @@ class BackendService {
   // MARK NOTIFICATION AS READ
   // =========================================================
   static Future<void> markNotificationRead(String notifId) async {
-    await _firestore.collection('user_notifications').doc(notifId).update({'read': true});
+    await _firestore
+        .collection('user_notifications')
+        .doc(notifId)
+        .update({'read': true});
   }
 
   static Future<void> markAllNotificationsRead() async {
@@ -748,7 +732,7 @@ class BackendService {
   }
 
   // =========================================================
-  // EVENT ATTENDANCE (RSVP) — stores eventId for cancellation notifs
+  // EVENT ATTENDANCE (RSVP)
   // =========================================================
   static Future<BackendResult> attendEvent({
     required UpcomingEvent upcomingEvent,
@@ -757,7 +741,6 @@ class BackendService {
       final uid = _auth.currentUser?.uid;
       if (uid == null) throw Exception('Not logged in');
 
-      // Check if already attending
       final existing = await _firestore
           .collection('event_attendance')
           .where('uid', isEqualTo: uid)
@@ -779,7 +762,6 @@ class BackendService {
         'createdAt': Timestamp.now(),
       });
 
-      // Decrement available slots
       await _firestore.collection('events').doc(upcomingEvent.id).update({
         'availableSlots': FieldValue.increment(-1),
       });
@@ -807,8 +789,7 @@ class BackendService {
   }
 
   // =========================================================
-  // NOTIFY EVENT CREATOR when their event is approved
-  // (Called by admin-side code or cloud function)
+  // NOTIFY EVENT CREATOR WHEN APPROVED
   // =========================================================
   static Future<void> notifyEventApproved(String eventId) async {
     final doc = await _firestore.collection('events').doc(eventId).get();
@@ -827,7 +808,6 @@ class BackendService {
       'createdAt': FieldValue.serverTimestamp(),
     });
 
-    // Update the event status
     await _firestore.collection('events').doc(eventId).update({
       'status': 'approved',
     });
@@ -923,9 +903,7 @@ class BackendService {
           final lat = (b['lat'] as num?)?.toDouble();
           final lng = (b['lng'] as num?)?.toDouble();
           if (lat == null || lng == null) continue;
-          if (lat < minLat || lat > maxLat || lng < minLng || lng > maxLng) {
-            continue;
-          }
+          if (lat < minLat || lat > maxLat || lng < minLng || lng > maxLng) continue;
 
           final businessName = (b['name'] as String?)?.isNotEmpty == true
               ? b['name'] as String
@@ -984,9 +962,7 @@ class BackendService {
               phone: data['phone'] as String? ?? '',
               lat: lat,
               lng: lng,
-              address: loc['address'] as String? ??
-                  data['address'] as String? ??
-                  '',
+              address: loc['address'] as String? ?? data['address'] as String? ?? '',
               logoUrl: data['logoUrl'] as String?,
               businessDesc: '',
             ));
@@ -1001,8 +977,7 @@ class BackendService {
   // =========================================================
   // UPLOAD LOGO
   // =========================================================
-  static Future<String?> uploadLogoImage(
-      Uint8List bytes, String fileName) async {
+  static Future<String?> uploadLogoImage(Uint8List bytes, String fileName) async {
     try {
       return await _uploadToCloudinary(bytes, fileName,
           folder: 'business_logos', resourceType: 'image');
@@ -1017,7 +992,7 @@ class BackendService {
   static Future<String> _uploadToCloudinary(
     Uint8List fileBytes,
     String fileName, {
-    String folder = 'dti_documents',
+    String folder = 'or_documents',
     String resourceType = 'raw',
   }) async {
     const cloudName = 'Ydfwe9loex';
@@ -1041,8 +1016,7 @@ class BackendService {
       final jsonMap = json.decode(responseString);
       return jsonMap['secure_url'];
     } else {
-      throw Exception(
-          'Cloudinary upload failed with status: ${response.statusCode}');
+      throw Exception('Cloudinary upload failed with status: ${response.statusCode}');
     }
   }
 
@@ -1058,7 +1032,7 @@ class BackendService {
       if (user == null) throw Exception('Not logged in');
 
       final profile = await fetchUserProfile();
-      final name = profile?['name'] ?? profile?['username'] ?? 'User';
+      final name = profile?['name'] ?? 'User';
       final logoUrl = profile?['logoUrl'];
 
       await _firestore.collection('posts').add({
@@ -1091,10 +1065,8 @@ class BackendService {
         .limit(50)
         .snapshots()
         .asyncMap((snapshot) async {
-      final followDoc =
-          await _firestore.collection('follows').doc(uid).get();
-      final following =
-          List<String>.from(followDoc.data()?['following'] ?? []);
+      final followDoc = await _firestore.collection('follows').doc(uid).get();
+      final following = List<String>.from(followDoc.data()?['following'] ?? []);
       final allowed = {...following, uid};
 
       final posts = <Post>[];
@@ -1113,8 +1085,7 @@ class BackendService {
             uid: cd['uid'],
             authorName: cd['authorName'],
             content: cd['content'],
-            createdAt: (cd['createdAt'] as Timestamp?)?.toDate() ??
-                DateTime.now(),
+            createdAt: (cd['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
           );
         }).toList();
 
@@ -1129,8 +1100,8 @@ class BackendService {
             imageUrl: d['originalImageUrl'],
             likesCount: 0,
             likedByMe: false,
-            createdAt: (d['originalCreatedAt'] as Timestamp?)?.toDate() ??
-                DateTime.now(),
+            createdAt:
+                (d['originalCreatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
             comments: [],
           );
         }
@@ -1144,8 +1115,7 @@ class BackendService {
           imageUrl: d['imageUrl'],
           likesCount: d['likesCount'] ?? 0,
           likedByMe: (d['likedBy'] as List?)?.contains(uid) ?? false,
-          createdAt:
-              (d['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+          createdAt: (d['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
           comments: comments,
           isRepost: d['isRepost'] == true,
           originalPost: originalPost,
@@ -1187,7 +1157,7 @@ class BackendService {
       final uid = _auth.currentUser?.uid;
       if (uid == null) throw Exception('Not logged in');
       final profile = await fetchUserProfile();
-      final name = profile?['name'] ?? profile?['username'] ?? 'User';
+      final name = profile?['name'] ?? 'User';
 
       await _firestore
           .collection('posts')
@@ -1232,10 +1202,8 @@ class BackendService {
     final uid = _auth.currentUser?.uid;
     if (uid == null) return false;
     try {
-      final doc =
-          await _firestore.collection('follows').doc(uid).get();
-      final following =
-          List<String>.from(doc.data()?['following'] ?? []);
+      final doc = await _firestore.collection('follows').doc(uid).get();
+      final following = List<String>.from(doc.data()?['following'] ?? []);
       return following.contains(targetUid);
     } catch (e) {
       return false;
@@ -1245,8 +1213,7 @@ class BackendService {
   // =========================================================
   // UPLOAD POST IMAGE
   // =========================================================
-  static Future<String?> uploadPostImage(
-      Uint8List bytes, String fileName) async {
+  static Future<String?> uploadPostImage(Uint8List bytes, String fileName) async {
     try {
       return await _uploadToCloudinary(bytes, fileName,
           folder: 'post_images', resourceType: 'image');
@@ -1258,21 +1225,17 @@ class BackendService {
   // =========================================================
   // FETCH POST LIKERS
   // =========================================================
-  static Future<List<Map<String, dynamic>>> fetchPostLikers(
-      String postId) async {
+  static Future<List<Map<String, dynamic>>> fetchPostLikers(String postId) async {
     try {
-      final doc =
-          await _firestore.collection('posts').doc(postId).get();
+      final doc = await _firestore.collection('posts').doc(postId).get();
       if (!doc.exists) return [];
 
-      final likedBy =
-          List<String>.from(doc.data()?['likedBy'] ?? []);
+      final likedBy = List<String>.from(doc.data()?['likedBy'] ?? []);
       if (likedBy.isEmpty) return [];
 
       final List<Map<String, dynamic>> likers = [];
       for (final uid in likedBy) {
-        final userDoc =
-            await _firestore.collection('users').doc(uid).get();
+        final userDoc = await _firestore.collection('users').doc(uid).get();
         if (userDoc.exists) {
           likers.add({...userDoc.data()!, 'uid': uid});
         }
@@ -1295,7 +1258,7 @@ class BackendService {
       if (user == null) throw Exception('Not logged in');
 
       final profile = await fetchUserProfile();
-      final name = profile?['name'] ?? profile?['username'] ?? 'User';
+      final name = profile?['name'] ?? 'User';
       final logoUrl = profile?['logoUrl'];
 
       await _firestore.collection('posts').add({
