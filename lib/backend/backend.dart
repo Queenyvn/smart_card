@@ -157,12 +157,14 @@ class Post {
 }
 
 class PostComment {
+  final String id;
   final String uid;
   final String authorName;
   final String content;
   final DateTime createdAt;
 
   PostComment({
+    required this.id,
     required this.uid,
     required this.authorName,
     required this.content,
@@ -1079,6 +1081,10 @@ class BackendService {
     try {
       final user = _auth.currentUser;
       if (user == null) throw Exception('Not logged in');
+      final validation = validatePostContent(content);
+      if (validation != null) {
+        return BackendResult(success: false, message: validation);
+      }
       final profile = await fetchUserProfile();
       final name = profile?['name'] ?? 'User';
       final logoUrl = profile?['logoUrl'];
@@ -1126,6 +1132,7 @@ class BackendService {
         final comments = commentsSnap.docs.map((c) {
           final cd = c.data();
           return PostComment(
+            id: c.id,
             uid: cd['uid'],
             authorName: cd['authorName'],
             content: cd['content'],
@@ -1204,6 +1211,11 @@ class BackendService {
     try {
       final uid = _auth.currentUser?.uid;
       if (uid == null) throw Exception('Not logged in');
+      if (BackendService.containsProfanity(content)) {
+        return BackendResult(
+            success: false,
+            message: 'Comment contains inappropriate language.');
+      }
       final profile = await fetchUserProfile();
       final name = profile?['name'] ?? 'User';
       await _firestore
@@ -1221,6 +1233,150 @@ class BackendService {
       return BackendResult(success: false, message: e.toString());
     }
   }
+
+  // =========================================================
+// PROFANITY FILTER
+// =========================================================
+static const List<String> _bannedWords = [
+  'fuck', 'shit', 'asshole', 'bitch', 'bastard', 'damn', 'crap',
+  'piss', 'cock', 'dick', 'pussy', 'cunt', 'whore', 'slut', 'faggot',
+  'nigger', 'nigga', 'retard', 'putangina', 'gago', 'tangina', 'bobo',
+  'tanga', 'ulol', 'punyeta', 'tarantado', 'leche', 'puta', 'bwisit',
+  'pakyu', 'hudas', 'inutil', 'siraulo',
+];
+
+static bool containsProfanity(String text) {
+  final lower = text.toLowerCase();
+  for (final word in _bannedWords) {
+    // Match whole word with optional leet-speak (simple check)
+    final pattern = RegExp(
+      r'(^|[\s,\.!?])' + RegExp.escape(word) + r'($|[\s,\.!?])',
+    );
+    if (pattern.hasMatch(lower) || lower.contains(word)) return true;
+  }
+  return false;
+}
+
+static String? validatePostContent(String content) {
+  if (content.trim().isEmpty) return 'Post cannot be empty.';
+  if (containsProfanity(content)) {
+    return 'Your post contains inappropriate language. Please revise it.';
+  }
+  return null;
+}
+
+// =========================================================
+// DELETE POST
+// =========================================================
+static Future<BackendResult> deletePost(String postId) async {
+  try {
+    final user = _auth.currentUser;
+    if (user == null) throw Exception('Not logged in');
+    final doc = await _firestore.collection('posts').doc(postId).get();
+    if (!doc.exists) return BackendResult(success: false, message: 'Post not found');
+    if (doc.data()?['uid'] != user.uid) {
+      return BackendResult(success: false, message: 'Unauthorized');
+    }
+    // Delete all comments first
+    final comments = await _firestore
+        .collection('posts').doc(postId).collection('comments').get();
+    final batch = _firestore.batch();
+    for (final c in comments.docs) batch.delete(c.reference);
+    batch.delete(_firestore.collection('posts').doc(postId));
+    await batch.commit();
+    return BackendResult(success: true);
+  } catch (e) {
+    return BackendResult(success: false, message: e.toString());
+  }
+}
+
+// =========================================================
+// EDIT POST
+// =========================================================
+static Future<BackendResult> editPost({
+  required String postId,
+  required String newContent,
+}) async {
+  try {
+    final user = _auth.currentUser;
+    if (user == null) throw Exception('Not logged in');
+    final validation = validatePostContent(newContent);
+    if (validation != null) return BackendResult(success: false, message: validation);
+    final doc = await _firestore.collection('posts').doc(postId).get();
+    if (!doc.exists) return BackendResult(success: false, message: 'Post not found');
+    if (doc.data()?['uid'] != user.uid) {
+      return BackendResult(success: false, message: 'Unauthorized');
+    }
+    await _firestore.collection('posts').doc(postId).update({
+      'content': newContent.trim(),
+      'editedAt': FieldValue.serverTimestamp(),
+    });
+    return BackendResult(success: true);
+  } catch (e) {
+    return BackendResult(success: false, message: e.toString());
+  }
+}
+
+// =========================================================
+// DELETE COMMENT
+// =========================================================
+static Future<BackendResult> deleteComment({
+  required String postId,
+  required String commentId,
+}) async {
+  try {
+    final user = _auth.currentUser;
+    if (user == null) throw Exception('Not logged in');
+    final doc = await _firestore
+        .collection('posts').doc(postId)
+        .collection('comments').doc(commentId).get();
+    if (!doc.exists) return BackendResult(success: false, message: 'Comment not found');
+    if (doc.data()?['uid'] != user.uid) {
+      return BackendResult(success: false, message: 'Unauthorized');
+    }
+    await _firestore
+        .collection('posts').doc(postId)
+        .collection('comments').doc(commentId).delete();
+    return BackendResult(success: true);
+  } catch (e) {
+    return BackendResult(success: false, message: e.toString());
+  }
+}
+
+// =========================================================
+// EDIT COMMENT
+// =========================================================
+static Future<BackendResult> editComment({
+  required String postId,
+  required String commentId,
+  required String newContent,
+}) async {
+  try {
+    final user = _auth.currentUser;
+    if (user == null) throw Exception('Not logged in');
+    if (containsProfanity(newContent)) {
+      return BackendResult(
+          success: false,
+          message: 'Comment contains inappropriate language.');
+    }
+    final doc = await _firestore
+        .collection('posts').doc(postId)
+        .collection('comments').doc(commentId).get();
+    if (!doc.exists) return BackendResult(success: false, message: 'Comment not found');
+    if (doc.data()?['uid'] != user.uid) {
+      return BackendResult(success: false, message: 'Unauthorized');
+    }
+    await _firestore
+        .collection('posts').doc(postId)
+        .collection('comments').doc(commentId).update({
+      'content': newContent.trim(),
+      'editedAt': FieldValue.serverTimestamp(),
+    });
+    return BackendResult(success: true);
+  } catch (e) {
+    return BackendResult(success: false, message: e.toString());
+  }
+}
 
   // =========================================================
   // FOLLOW / UNFOLLOW

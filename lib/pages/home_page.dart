@@ -990,6 +990,155 @@ class _FeedPostCardState extends State<_FeedPostCard> {
   }
 
   @override
+  void _showPostOptions(BuildContext context) {
+    final isOwner = widget.post.uid == BackendService.currentUid;
+    if (!isOwner) return;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40, height: 4,
+              margin: const EdgeInsets.symmetric(vertical: 12),
+              decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(4)),
+            ),
+            ListTile(
+              leading: const Icon(Icons.edit_outlined, color: Color(0xFF1976D2)),
+              title: const Text('Edit Post'),
+              onTap: () {
+                Navigator.pop(context);
+                _showEditPostSheet(context);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.delete_outline, color: Colors.red),
+              title: const Text('Delete Post', style: TextStyle(color: Colors.red)),
+              onTap: () async {
+                Navigator.pop(context);
+                final confirm = await showDialog<bool>(
+                  context: context,
+                  builder: (_) => AlertDialog(
+                    title: const Text('Delete Post'),
+                    content: const Text('Are you sure you want to delete this post? This cannot be undone.'),
+                    actions: [
+                      TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, true),
+                        child: const Text('Delete', style: TextStyle(color: Colors.red)),
+                      ),
+                    ],
+                  ),
+                );
+                if (confirm == true && context.mounted) {
+                  final result = await BackendService.deletePost(widget.post.id);
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                      content: Text(result.success ? 'Post deleted.' : result.message ?? 'Failed'),
+                      backgroundColor: result.success ? Colors.green : Colors.red,
+                      behavior: SnackBarBehavior.floating,
+                    ));
+                  }
+                }
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showEditPostSheet(BuildContext context) {
+    final ctrl = TextEditingController(text: widget.post.content);
+    bool saving = false;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setS) => Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(ctx).viewInsets.bottom,
+            left: 20, right: 20, top: 20,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(child: Container(
+                width: 40, height: 4,
+                margin: const EdgeInsets.only(bottom: 14),
+                decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(4)),
+              )),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Edit Post', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+                  IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx)),
+                ],
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: ctrl,
+                maxLines: 6,
+                minLines: 3,
+                maxLength: 1000,
+                autofocus: true,
+                decoration: InputDecoration(
+                  hintText: "Edit your post...",
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: Colors.grey.shade200)),
+                  focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: Colors.red, width: 1.5)),
+                  filled: true, fillColor: const Color(0xFFF9F9F9),
+                ),
+              ),
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: saving ? null : () async {
+                    setS(() => saving = true);
+                    final result = await BackendService.editPost(
+                      postId: widget.post.id,
+                      newContent: ctrl.text,
+                    );
+                    setS(() => saving = false);
+                    if (ctx.mounted) {
+                      Navigator.pop(ctx);
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                        content: Text(result.success ? 'Post updated!' : result.message ?? 'Failed'),
+                        backgroundColor: result.success ? Colors.green : Colors.red,
+                        behavior: SnackBarBehavior.floating,
+                      ));
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red,
+                    minimumSize: const Size(double.infinity, 46),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  child: saving
+                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                      : const Text('Save Changes', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                ),
+              ),
+              const SizedBox(height: 20),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
   Widget build(BuildContext context) {
     final post = widget.post;
     final comments = post.comments;
@@ -1081,7 +1230,10 @@ class _FeedPostCardState extends State<_FeedPostCard> {
                       ],
                     ),
                   ),
-                  const Icon(Icons.more_horiz, color: Colors.grey),
+                  GestureDetector(
+                    onTap: () => _showPostOptions(context),
+                    child: const Icon(Icons.more_horiz, color: Colors.grey),
+                  ),
                 ],
               ),
             ),
@@ -1213,33 +1365,124 @@ class _FeedPostCardState extends State<_FeedPostCard> {
   }
 
   Widget _commentTile(PostComment c) {
+    final isOwner = c.uid == BackendService.currentUid;
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const CircleAvatar(
-              radius: 14,
-              backgroundImage: AssetImage('assets/profile.jpg')),
+          const CircleAvatar(radius: 14, backgroundImage: AssetImage('assets/profile.jpg')),
           const SizedBox(width: 8),
           Expanded(
             child: Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
                   color: const Color(0xFFF3F3F3),
                   borderRadius: BorderRadius.circular(14)),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(c.authorName,
-                      style: const TextStyle(
-                          fontWeight: FontWeight.bold, fontSize: 12)),
+                  Row(
+                    children: [
+                      Expanded(child: Text(c.authorName,
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                      if (isOwner)
+                        GestureDetector(
+                          onTap: () => _showCommentOptions(c),
+                          child: const Icon(Icons.more_horiz, size: 16, color: Colors.grey),
+                        ),
+                    ],
+                  ),
                   const SizedBox(height: 2),
                   Text(c.content, style: const TextStyle(fontSize: 13)),
                 ],
               ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showCommentOptions(PostComment c) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (_) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(width: 40, height: 4,
+              margin: const EdgeInsets.symmetric(vertical: 12),
+              decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(4))),
+            ListTile(
+              leading: const Icon(Icons.edit_outlined, color: Color(0xFF1976D2)),
+              title: const Text('Edit Comment'),
+              onTap: () { Navigator.pop(context); _showEditCommentDialog(c); },
+            ),
+            ListTile(
+              leading: const Icon(Icons.delete_outline, color: Colors.red),
+              title: const Text('Delete Comment', style: TextStyle(color: Colors.red)),
+              onTap: () async {
+                Navigator.pop(context);
+                final result = await BackendService.deleteComment(
+                    postId: widget.post.id, commentId: c.id);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                    content: Text(result.success ? 'Comment deleted.' : result.message ?? 'Failed'),
+                    backgroundColor: result.success ? Colors.green : Colors.red,
+                    behavior: SnackBarBehavior.floating,
+                  ));
+                }
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showEditCommentDialog(PostComment c) {
+    final ctrl = TextEditingController(text: c.content);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Edit Comment'),
+        content: TextField(
+          controller: ctrl,
+          maxLines: 4,
+          minLines: 2,
+          decoration: InputDecoration(
+            hintText: 'Edit your comment...',
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+            focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: Colors.red)),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () async {
+              final result = await BackendService.editComment(
+                postId: widget.post.id,
+                commentId: c.id,
+                newContent: ctrl.text,
+              );
+              if (ctx.mounted) {
+                Navigator.pop(ctx);
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                  content: Text(result.success ? 'Comment updated!' : result.message ?? 'Failed'),
+                  backgroundColor: result.success ? Colors.green : Colors.red,
+                  behavior: SnackBarBehavior.floating,
+                ));
+              }
+            },
+            child: const Text('Save', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
