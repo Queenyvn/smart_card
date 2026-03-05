@@ -18,6 +18,7 @@ class _CalendarPageState extends State<CalendarPage>
     with SingleTickerProviderStateMixin {
   DateTime _focusedDay = DateTime.now();
   DateTime? _selectedDay;
+  // 3 tabs: Events | My Schedule | History
   late TabController _tabController;
 
   final _titleCtrl = TextEditingController();
@@ -32,7 +33,7 @@ class _CalendarPageState extends State<CalendarPage>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
   }
 
   @override
@@ -271,9 +272,11 @@ class _CalendarPageState extends State<CalendarPage>
           indicatorColor: cbocPrimary,
           labelColor: cbocPrimary,
           unselectedLabelColor: Colors.grey,
+          // ── 3 tabs now ──────────────────────────────────────
           tabs: const [
             Tab(text: 'Events'),
-            Tab(text: 'My Submissions'),
+            Tab(text: 'My Schedule'),
+            Tab(text: 'History'),
           ],
         ),
       ),
@@ -285,6 +288,7 @@ class _CalendarPageState extends State<CalendarPage>
       body: TabBarView(
         controller: _tabController,
         children: [
+          // ── Tab 0: Events (unchanged) ──────────────────────
           _EventsTab(
             focusedDay: _focusedDay,
             selectedDay: _selectedDay,
@@ -298,16 +302,19 @@ class _CalendarPageState extends State<CalendarPage>
             sameMonth: _sameMonth,
             onEventTap: _showEventDetail,
           ),
-          const _MySubmissionsTab(),
+          // ── Tab 1: Personal Schedule Calendar ─────────────
+          const _MyScheduleTab(),
+          // ── Tab 2: Attended History ────────────────────────
+          const _HistoryTab(),
         ],
       ),
     );
   }
 }
 
-// ── EVENTS TAB ─────────────────────────────────────────────────────────────────
-// Shows ALL approved events + the user's own pending/rejected submissions on the
-// same calendar view, clearly labelled with status badges.
+// =============================================================================
+// EVENTS TAB (unchanged from original)
+// =============================================================================
 
 class _EventsTab extends StatelessWidget {
   final DateTime focusedDay;
@@ -332,7 +339,6 @@ class _EventsTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Listen to both streams simultaneously
     return StreamBuilder<List<UpcomingEvent>>(
       stream: BackendService.approvedEventsStream(),
       builder: (context, approvedSnap) {
@@ -346,9 +352,6 @@ class _EventsTab extends StatelessWidget {
                 approvedSnap.connectionState == ConnectionState.waiting &&
                     approvedEvents.isEmpty;
 
-            // Show user's own events that are: pending, rejected, or
-            // cancel_requested. Approved ones already appear in approvedEvents.
-            // Cancelled ones are hidden.
             final myVisibleSubmissions = myEvents
                 .where((e) =>
                     e.status == 'pending' ||
@@ -356,7 +359,6 @@ class _EventsTab extends StatelessWidget {
                     e.status == 'cancel_requested')
                 .toList();
 
-            // Build marker map for calendar dots
             final Map<DateTime, List<dynamic>> markerMap = {};
             for (final e in approvedEvents) {
               final key = DateTime(e.date.year, e.date.month, e.date.day);
@@ -367,7 +369,6 @@ class _EventsTab extends StatelessWidget {
               markerMap.putIfAbsent(key, () => []).add(e);
             }
 
-            // Filter by selected day / month
             final List<UpcomingEvent> visibleApproved =
                 approvedEvents.where((e) {
               if (selectedDay != null) return sameDay(e.date, selectedDay!);
@@ -387,7 +388,6 @@ class _EventsTab extends StatelessWidget {
 
             return Column(
               children: [
-                // ── CALENDAR ─────────────────────────────────────────────
                 Container(
                   color: Colors.white,
                   child: TableCalendar(
@@ -428,8 +428,6 @@ class _EventsTab extends StatelessWidget {
                     ),
                   ),
                 ),
-
-                // ── DATE LABEL BAR ────────────────────────────────────────
                 Container(
                   width: double.infinity,
                   color: Colors.white,
@@ -462,13 +460,10 @@ class _EventsTab extends StatelessWidget {
                   ),
                 ),
                 const Divider(height: 1),
-
-                // ── EVENT LIST ────────────────────────────────────────────
                 Expanded(
                   child: isLoading
                       ? const Center(
-                          child:
-                              CircularProgressIndicator(color: cbocPrimary))
+                          child: CircularProgressIndicator(color: cbocPrimary))
                       : nothingVisible
                           ? Center(
                               child: Column(
@@ -493,10 +488,8 @@ class _EventsTab extends StatelessWidget {
                               padding:
                                   const EdgeInsets.fromLTRB(12, 10, 12, 80),
                               children: [
-                                // ── User's own pending / rejected events ──
                                 if (visibleMine.isNotEmpty) ...[
-                                  _sectionLabel(
-                                      Icons.person_pin_rounded,
+                                  _sectionLabel(Icons.person_pin_rounded,
                                       'My Submitted Events'),
                                   ...visibleMine.map(
                                       (e) => _SubmittedEventCard(event: e)),
@@ -507,8 +500,6 @@ class _EventsTab extends StatelessWidget {
                                       child: Divider(),
                                     ),
                                 ],
-
-                                // ── Approved public events ─────────────────
                                 if (visibleApproved.isNotEmpty) ...[
                                   if (visibleMine.isNotEmpty)
                                     _sectionLabel(
@@ -539,23 +530,868 @@ class _EventsTab extends StatelessWidget {
         children: [
           Icon(icon, size: 14, color: cbocPrimary),
           const SizedBox(width: 5),
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.bold,
-              color: cbocPrimary,
-            ),
-          ),
+          Text(label,
+              style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: cbocPrimary)),
         ],
       ),
     );
   }
 }
 
-// ── SUBMITTED EVENT CARD (calendar tab) ──────────────────────────────────────
-// Shows user's pending / rejected / cancel_requested events with status badge
-// and a "Cancel Request" button for pending ones.
+// =============================================================================
+// ── NEW FEATURE 3: MY SCHEDULE TAB
+// Personal calendar showing the user's RSVPed upcoming events.
+// Days with scheduled events are highlighted; tapping shows them below.
+// =============================================================================
+
+class _MyScheduleTab extends StatefulWidget {
+  const _MyScheduleTab();
+
+  @override
+  State<_MyScheduleTab> createState() => _MyScheduleTabState();
+}
+
+class _MyScheduleTabState extends State<_MyScheduleTab> {
+  DateTime _focusedDay = DateTime.now();
+  DateTime? _selectedDay;
+
+  bool _sameDay(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<List<AttendedEvent>>(
+      stream: BackendService.myScheduleStream(),
+      builder: (context, snap) {
+        final schedule = snap.data ?? [];
+        final isLoading =
+            snap.connectionState == ConnectionState.waiting && schedule.isEmpty;
+
+        // Build marker map for calendar dots
+        final Map<DateTime, List<AttendedEvent>> markerMap = {};
+        for (final e in schedule) {
+          final key = DateTime(e.date.year, e.date.month, e.date.day);
+          markerMap.putIfAbsent(key, () => []).add(e);
+        }
+
+        // Events to show in list below calendar
+        List<AttendedEvent> listed;
+        if (_selectedDay != null) {
+          listed = schedule
+              .where((e) => _sameDay(e.date, _selectedDay!))
+              .toList();
+        } else {
+          // Show all this month
+          listed = schedule
+              .where((e) =>
+                  e.date.year == _focusedDay.year &&
+                  e.date.month == _focusedDay.month)
+              .toList();
+        }
+
+        return Column(
+          children: [
+            // ── Calendar ────────────────────────────────────────
+            Container(
+              color: Colors.white,
+              child: TableCalendar(
+                firstDay: DateTime.utc(2020, 1, 1),
+                lastDay: DateTime.utc(2030, 12, 31),
+                focusedDay: _focusedDay,
+                selectedDayPredicate: (day) =>
+                    _selectedDay != null && _sameDay(day, _selectedDay!),
+                eventLoader: (day) {
+                  final key = DateTime(day.year, day.month, day.day);
+                  return markerMap[key] ?? [];
+                },
+                onDaySelected: (selected, focused) {
+                  setState(() {
+                    if (_selectedDay != null && _sameDay(selected, _selectedDay!)) {
+                      _selectedDay = null;
+                    } else {
+                      _selectedDay = selected;
+                      _focusedDay = focused;
+                    }
+                  });
+                },
+                onPageChanged: (focused) {
+                  setState(() {
+                    _focusedDay = focused;
+                    _selectedDay = null;
+                  });
+                },
+                headerStyle: const HeaderStyle(
+                  titleCentered: true,
+                  formatButtonVisible: false,
+                ),
+                calendarStyle: CalendarStyle(
+                  todayDecoration: const BoxDecoration(
+                      color: cbocAccent, shape: BoxShape.circle),
+                  selectedDecoration: const BoxDecoration(
+                      color: cbocPrimary, shape: BoxShape.circle),
+                  // Highlight days with events using a custom builder
+                  markerDecoration: BoxDecoration(
+                      color: Colors.green.shade600, shape: BoxShape.circle),
+                  markerSize: 5,
+                  markersMaxCount: 3,
+                ),
+              ),
+            ),
+
+            // ── Date label bar ───────────────────────────────────
+            Container(
+              width: double.infinity,
+              color: Colors.white,
+              padding: const EdgeInsets.fromLTRB(16, 6, 16, 10),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.green.shade50,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: Colors.green.shade200),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.event_available_rounded,
+                            size: 13, color: Colors.green.shade700),
+                        const SizedBox(width: 5),
+                        Text(
+                          'My Schedule — ${_selectedDay != null ? DateFormat('MMM d, yyyy').format(_selectedDay!) : DateFormat('MMMM yyyy').format(_focusedDay)}',
+                          style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.green.shade700),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (_selectedDay != null) ...[
+                    const Spacer(),
+                    GestureDetector(
+                      onTap: () => setState(() => _selectedDay = null),
+                      child: const Text('Show month',
+                          style:
+                              TextStyle(fontSize: 12, color: Colors.grey)),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+
+            // ── Event list ───────────────────────────────────────
+            Expanded(
+              child: isLoading
+                  ? const Center(
+                      child: CircularProgressIndicator(color: cbocPrimary))
+                  : listed.isEmpty
+                      ? Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.event_busy_rounded,
+                                  size: 48, color: Colors.grey.shade300),
+                              const SizedBox(height: 12),
+                              Text(
+                                _selectedDay != null
+                                    ? 'Nothing scheduled on this day'
+                                    : 'No upcoming events this month',
+                                style: TextStyle(
+                                    color: Colors.grey.shade400,
+                                    fontSize: 14),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                'RSVP to events in the Events tab',
+                                style: TextStyle(
+                                    color: Colors.grey.shade300,
+                                    fontSize: 12),
+                              ),
+                            ],
+                          ),
+                        )
+                      : ListView.builder(
+                          padding:
+                              const EdgeInsets.fromLTRB(12, 12, 12, 80),
+                          itemCount: listed.length,
+                          itemBuilder: (_, i) =>
+                              _ScheduleEventCard(event: listed[i]),
+                        ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+// ── Schedule event card ───────────────────────────────────────────────────────
+class _ScheduleEventCard extends StatelessWidget {
+  final AttendedEvent event;
+  const _ScheduleEventCard({required this.event});
+
+  @override
+  Widget build(BuildContext context) {
+    final daysUntil = event.date
+        .difference(DateTime(
+            DateTime.now().year, DateTime.now().month, DateTime.now().day))
+        .inDays;
+    final urgencyColor = daysUntil == 0
+        ? Colors.orange
+        : daysUntil <= 3
+            ? Colors.amber.shade700
+            : Colors.green.shade600;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border:
+            Border.all(color: urgencyColor.withOpacity(0.35), width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Date badge
+            Container(
+              width: 52,
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              decoration: BoxDecoration(
+                color: urgencyColor.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Column(
+                children: [
+                  Text(
+                    DateFormat('MMM').format(event.date).toUpperCase(),
+                    style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        color: urgencyColor),
+                  ),
+                  Text(
+                    DateFormat('d').format(event.date),
+                    style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: urgencyColor),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(event.eventTitle,
+                            style: const TextStyle(
+                                fontWeight: FontWeight.bold, fontSize: 14)),
+                      ),
+                      // Days-until badge
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: urgencyColor.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          daysUntil == 0
+                              ? 'Today!'
+                              : daysUntil == 1
+                                  ? 'Tomorrow'
+                                  : 'In $daysUntil days',
+                          style: TextStyle(
+                              fontSize: 10,
+                              color: urgencyColor,
+                              fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Icon(Icons.location_on_outlined,
+                          size: 12, color: Colors.grey.shade500),
+                      const SizedBox(width: 3),
+                      Expanded(
+                        child: Text(event.venue,
+                            style: TextStyle(
+                                color: Colors.grey.shade600, fontSize: 12),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Icon(Icons.check_circle_outline_rounded,
+                          size: 12, color: Colors.green.shade600),
+                      const SizedBox(width: 3),
+                      Text('RSVP confirmed',
+                          style: TextStyle(
+                              color: Colors.green.shade600,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500)),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// ── NEW FEATURE 1 & 2: HISTORY TAB
+// Lists all events the user RSVPed to.
+// Past events show a "Leave Feedback" button if not yet reviewed.
+// =============================================================================
+
+class _HistoryTab extends StatelessWidget {
+  const _HistoryTab();
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<List<AttendedEvent>>(
+      stream: BackendService.attendedEventsStream(),
+      builder: (context, snap) {
+        if (snap.connectionState == ConnectionState.waiting) {
+          return const Center(
+              child: CircularProgressIndicator(color: cbocPrimary));
+        }
+
+        final all = snap.data ?? [];
+
+        if (all.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.history_rounded,
+                    size: 52, color: Colors.grey.shade300),
+                const SizedBox(height: 12),
+                Text("No event history yet.",
+                    style: TextStyle(
+                        color: Colors.grey.shade400, fontSize: 14)),
+                const SizedBox(height: 6),
+                Text("Events you RSVP to will appear here.",
+                    style: TextStyle(
+                        color: Colors.grey.shade300, fontSize: 12)),
+              ],
+            ),
+          );
+        }
+
+        final upcoming = all.where((e) => !e.isPast).toList();
+        final past = all.where((e) => e.isPast).toList();
+
+        return ListView(
+          padding: const EdgeInsets.fromLTRB(12, 14, 12, 80),
+          children: [
+            // ── Upcoming RSVP'd events ─────────────────────────
+            if (upcoming.isNotEmpty) ...[
+              _sectionHeader(
+                  Icons.upcoming_rounded, 'Upcoming RSVPs', Colors.blue.shade700),
+              ...upcoming.map((e) => _HistoryCard(event: e)),
+              const SizedBox(height: 8),
+            ],
+            // ── Past events ────────────────────────────────────
+            if (past.isNotEmpty) ...[
+              _sectionHeader(
+                  Icons.history_rounded, 'Past Events', cbocPrimary),
+              ...past.map((e) => _HistoryCard(event: e)),
+            ],
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _sectionHeader(IconData icon, String label, Color color) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10, left: 2),
+      child: Row(
+        children: [
+          Icon(icon, size: 15, color: color),
+          const SizedBox(width: 6),
+          Text(label,
+              style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                  color: color)),
+        ],
+      ),
+    );
+  }
+}
+
+// ── History card ──────────────────────────────────────────────────────────────
+class _HistoryCard extends StatelessWidget {
+  final AttendedEvent event;
+  const _HistoryCard({required this.event});
+
+  void _openFeedbackSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
+      builder: (_) => _FeedbackSheet(event: event),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isPast = event.isPast;
+    final needsFeedback = isPast && !event.feedbackSubmitted;
+    final statusColor = isPast
+        ? (event.feedbackSubmitted ? Colors.green.shade600 : Colors.grey)
+        : Colors.blue.shade600;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 6,
+              offset: const Offset(0, 2))
+        ],
+      ),
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(14),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Date badge
+                Container(
+                  width: 50,
+                  padding: const EdgeInsets.symmetric(vertical: 7),
+                  decoration: BoxDecoration(
+                    color: isPast
+                        ? Colors.grey.shade100
+                        : Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Column(
+                    children: [
+                      Text(
+                        DateFormat('MMM').format(event.date).toUpperCase(),
+                        style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: statusColor),
+                      ),
+                      Text(
+                        DateFormat('d').format(event.date),
+                        style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: statusColor),
+                      ),
+                      Text(
+                        DateFormat('yyyy').format(event.date),
+                        style: TextStyle(
+                            fontSize: 9,
+                            color: Colors.grey.shade400),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(event.eventTitle,
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                              color: isPast
+                                  ? Colors.black87
+                                  : Colors.black)),
+                      const SizedBox(height: 3),
+                      Row(
+                        children: [
+                          Icon(Icons.location_on_outlined,
+                              size: 12, color: Colors.grey.shade500),
+                          const SizedBox(width: 3),
+                          Expanded(
+                            child: Text(event.venue,
+                                style: TextStyle(
+                                    color: Colors.grey.shade600,
+                                    fontSize: 12),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 5),
+                      // Status pill
+                      _StatusPill(event: event),
+                      // Star rating (if submitted)
+                      if (event.feedbackSubmitted && event.rating != null) ...[
+                        const SizedBox(height: 5),
+                        Row(
+                          children: List.generate(
+                            5,
+                            (i) => Icon(
+                              i < event.rating!
+                                  ? Icons.star_rounded
+                                  : Icons.star_outline_rounded,
+                              size: 14,
+                              color: Colors.amber.shade600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // ── Action footer ──────────────────────────────────
+          if (needsFeedback) ...[
+            const Divider(height: 1),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 6, 12, 8),
+              child: Row(
+                children: [
+                  Icon(Icons.rate_review_outlined,
+                      size: 13, color: cbocPrimary),
+                  const SizedBox(width: 6),
+                  const Expanded(
+                    child: Text(
+                      'How was this event? Share your experience.',
+                      style: TextStyle(fontSize: 11, color: Colors.grey),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () => _openFeedbackSheet(context),
+                    style: TextButton.styleFrom(
+                      foregroundColor: cbocPrimary,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 4),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: const Text('Rate & Review',
+                        style: TextStyle(
+                            fontSize: 12, fontWeight: FontWeight.w600)),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          // Show feedback text if submitted
+          if (event.feedbackSubmitted &&
+              event.feedback != null &&
+              event.feedback!.isNotEmpty) ...[
+            const Divider(height: 1),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 8, 14, 10),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.format_quote_rounded,
+                      size: 14, color: Colors.grey.shade400),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      event.feedback!,
+                      style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey.shade600,
+                          fontStyle: FontStyle.italic),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+// ── Status pill widget ────────────────────────────────────────────────────────
+class _StatusPill extends StatelessWidget {
+  final AttendedEvent event;
+  const _StatusPill({required this.event});
+
+  @override
+  Widget build(BuildContext context) {
+    Color color;
+    IconData icon;
+    String label;
+
+    if (!event.isPast) {
+      color = Colors.blue.shade600;
+      icon = Icons.event_available_rounded;
+      label = 'RSVP Confirmed';
+    } else if (event.feedbackSubmitted) {
+      color = Colors.green.shade600;
+      icon = Icons.check_circle_rounded;
+      label = 'Attended';
+    } else {
+      color = Colors.grey.shade500;
+      icon = Icons.help_outline_rounded;
+      label = 'Awaiting feedback';
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 11, color: color),
+          const SizedBox(width: 3),
+          Text(label,
+              style: TextStyle(
+                  fontSize: 10,
+                  color: color,
+                  fontWeight: FontWeight.w600)),
+        ],
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// ── NEW FEATURE 2: FEEDBACK BOTTOM SHEET
+// Post-event form: star rating + free-text review.
+// =============================================================================
+
+class _FeedbackSheet extends StatefulWidget {
+  final AttendedEvent event;
+  const _FeedbackSheet({required this.event});
+
+  @override
+  State<_FeedbackSheet> createState() => _FeedbackSheetState();
+}
+
+class _FeedbackSheetState extends State<_FeedbackSheet> {
+  int _rating = 0;
+  final _feedbackCtrl = TextEditingController();
+  bool _submitting = false;
+
+  Future<void> _submit() async {
+    if (_rating == 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select a star rating.')),
+      );
+      return;
+    }
+    setState(() => _submitting = true);
+    final result = await BackendService.submitAttendanceFeedback(
+      attendanceId: widget.event.id,
+      rating: _rating,
+      feedback: _feedbackCtrl.text.trim(),
+    );
+    if (mounted) {
+      setState(() => _submitting = false);
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(result.success
+            ? 'Thank you for your feedback!'
+            : result.message ?? 'Failed to submit.'),
+        backgroundColor: result.success ? Colors.green : Colors.red,
+        behavior: SnackBarBehavior.floating,
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+        left: 20,
+        right: 20,
+        top: 20,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Handle bar
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.only(bottom: 16),
+              decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(4)),
+            ),
+          ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Rate & Review',
+                        style: TextStyle(
+                            fontSize: 17, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 2),
+                    Text(widget.event.eventTitle,
+                        style: const TextStyle(
+                            fontSize: 13, color: Colors.grey),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis),
+                  ],
+                ),
+              ),
+              IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: () => Navigator.pop(context)),
+            ],
+          ),
+          const SizedBox(height: 16),
+          // ── Star rating row ──────────────────────────────────
+          const Text('How would you rate this event?',
+              style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.black87)),
+          const SizedBox(height: 10),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: List.generate(5, (i) {
+              final starIndex = i + 1;
+              return GestureDetector(
+                onTap: () => setState(() => _rating = starIndex),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  child: Icon(
+                    _rating >= starIndex
+                        ? Icons.star_rounded
+                        : Icons.star_outline_rounded,
+                    size: 40,
+                    color: _rating >= starIndex
+                        ? Colors.amber.shade500
+                        : Colors.grey.shade300,
+                  ),
+                ),
+              );
+            }),
+          ),
+          if (_rating > 0) ...[
+            const SizedBox(height: 4),
+            Center(
+              child: Text(
+                ['', 'Poor', 'Fair', 'Good', 'Great', 'Excellent!'][_rating],
+                style: TextStyle(
+                    fontSize: 13,
+                    color: Colors.amber.shade700,
+                    fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
+          const SizedBox(height: 16),
+          // ── Text feedback ────────────────────────────────────
+          TextField(
+            controller: _feedbackCtrl,
+            maxLines: 4,
+            minLines: 3,
+            maxLength: 500,
+            decoration: InputDecoration(
+              hintText: 'Share your experience (optional)...',
+              hintStyle:
+                  const TextStyle(color: Colors.grey, fontSize: 13),
+              border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide:
+                      BorderSide(color: Colors.grey.shade200)),
+              enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide:
+                      BorderSide(color: Colors.grey.shade200)),
+              focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide:
+                      const BorderSide(color: cbocPrimary, width: 1.5)),
+              filled: true,
+              fillColor: const Color(0xFFF9F9F9),
+              counterStyle:
+                  const TextStyle(fontSize: 11, color: Colors.grey),
+            ),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: _submitting ? null : _submit,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: cbocPrimary,
+                minimumSize: const Size(double.infinity, 48),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+              ),
+              child: _submitting
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                          color: Colors.white, strokeWidth: 2))
+                  : const Text('Submit Review',
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15)),
+            ),
+          ),
+          const SizedBox(height: 20),
+        ],
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// SUBMITTED EVENT CARD (calendar tab — unchanged)
+// =============================================================================
 
 class _SubmittedEventCard extends StatelessWidget {
   final UserSubmittedEvent event;
@@ -563,40 +1399,28 @@ class _SubmittedEventCard extends StatelessWidget {
 
   Color get _color {
     switch (event.status) {
-      case 'pending':
-        return Colors.orange;
-      case 'rejected':
-        return Colors.red.shade700;
-      case 'cancel_requested':
-        return Colors.blue.shade700;
-      default:
-        return Colors.grey;
+      case 'pending': return Colors.orange;
+      case 'rejected': return Colors.red.shade700;
+      case 'cancel_requested': return Colors.blue.shade700;
+      default: return Colors.grey;
     }
   }
 
   String get _label {
     switch (event.status) {
-      case 'pending':
-        return 'Pending Review';
-      case 'rejected':
-        return 'Rejected';
-      case 'cancel_requested':
-        return 'Cancellation Requested';
-      default:
-        return event.status;
+      case 'pending': return 'Pending Review';
+      case 'rejected': return 'Rejected';
+      case 'cancel_requested': return 'Cancellation Requested';
+      default: return event.status;
     }
   }
 
   IconData get _icon {
     switch (event.status) {
-      case 'pending':
-        return Icons.hourglass_empty_rounded;
-      case 'rejected':
-        return Icons.cancel_rounded;
-      case 'cancel_requested':
-        return Icons.pending_actions_rounded;
-      default:
-        return Icons.help_outline;
+      case 'pending': return Icons.hourglass_empty_rounded;
+      case 'rejected': return Icons.cancel_rounded;
+      case 'cancel_requested': return Icons.pending_actions_rounded;
+      default: return Icons.help_outline;
     }
   }
 
@@ -614,9 +1438,8 @@ class _SubmittedEventCard extends StatelessWidget {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Keep It'),
-          ),
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Keep It')),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
               backgroundColor: cbocPrimary,
@@ -656,21 +1479,18 @@ class _SubmittedEventCard extends StatelessWidget {
         border: Border.all(color: _color.withOpacity(0.35), width: 1.5),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
-          ),
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 6,
+              offset: const Offset(0, 2)),
         ],
       ),
       child: Column(
         children: [
-          // ── Main row ────────────────────────────────────────────────────
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 14, 14, 10),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Date badge
                 Container(
                   width: 48,
                   padding: const EdgeInsets.symmetric(vertical: 6),
@@ -698,7 +1518,6 @@ class _SubmittedEventCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 12),
-                // Details + status badge
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -707,14 +1526,12 @@ class _SubmittedEventCard extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Expanded(
-                            child: Text(
-                              event.title,
-                              style: const TextStyle(
-                                  fontWeight: FontWeight.bold, fontSize: 14),
-                            ),
+                            child: Text(event.title,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14)),
                           ),
                           const SizedBox(width: 6),
-                          // Status badge
                           Container(
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 7, vertical: 3),
@@ -727,13 +1544,11 @@ class _SubmittedEventCard extends StatelessWidget {
                               children: [
                                 Icon(_icon, size: 11, color: _color),
                                 const SizedBox(width: 3),
-                                Text(
-                                  _label,
-                                  style: TextStyle(
-                                      fontSize: 10,
-                                      color: _color,
-                                      fontWeight: FontWeight.w600),
-                                ),
+                                Text(_label,
+                                    style: TextStyle(
+                                        fontSize: 10,
+                                        color: _color,
+                                        fontWeight: FontWeight.w600)),
                               ],
                             ),
                           ),
@@ -746,13 +1561,11 @@ class _SubmittedEventCard extends StatelessWidget {
                               size: 12, color: Colors.grey),
                           const SizedBox(width: 3),
                           Expanded(
-                            child: Text(
-                              event.venue,
-                              style: const TextStyle(
-                                  color: Colors.grey, fontSize: 12),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
+                            child: Text(event.venue,
+                                style: const TextStyle(
+                                    color: Colors.grey, fontSize: 12),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis),
                           ),
                         ],
                       ),
@@ -775,8 +1588,6 @@ class _SubmittedEventCard extends StatelessWidget {
               ],
             ),
           ),
-
-          // ── Status footer bar ────────────────────────────────────────────
           const Divider(height: 1),
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 7, 8, 7),
@@ -794,7 +1605,6 @@ class _SubmittedEventCard extends StatelessWidget {
                     style: TextStyle(fontSize: 11, color: _color),
                   ),
                 ),
-                // Show cancel button only for pending events
                 if (event.status == 'pending')
                   TextButton.icon(
                     onPressed: () => _showCancelDialog(context),
@@ -817,59 +1627,43 @@ class _SubmittedEventCard extends StatelessWidget {
   }
 }
 
-// ── MY SUBMISSIONS TAB ────────────────────────────────────────────────────────
+// =============================================================================
+// MY SUBMISSIONS TAB (unchanged from original)
+// =============================================================================
 
 class _MySubmissionsTab extends StatelessWidget {
   const _MySubmissionsTab();
 
   Color _statusColor(String status) {
     switch (status) {
-      case 'approved':
-        return Colors.green;
-      case 'pending':
-        return Colors.orange;
-      case 'rejected':
-        return Colors.red.shade700;
-      case 'cancel_requested':
-        return Colors.blue.shade700;
-      case 'cancelled':
-        return Colors.grey;
-      default:
-        return Colors.orange;
+      case 'approved': return Colors.green;
+      case 'pending': return Colors.orange;
+      case 'rejected': return Colors.red.shade700;
+      case 'cancel_requested': return Colors.blue.shade700;
+      case 'cancelled': return Colors.grey;
+      default: return Colors.orange;
     }
   }
 
   String _statusLabel(String status) {
     switch (status) {
-      case 'approved':
-        return 'Approved';
-      case 'pending':
-        return 'Pending Review';
-      case 'rejected':
-        return 'Rejected';
-      case 'cancel_requested':
-        return 'Cancellation Requested';
-      case 'cancelled':
-        return 'Cancelled';
-      default:
-        return 'Pending';
+      case 'approved': return 'Approved';
+      case 'pending': return 'Pending Review';
+      case 'rejected': return 'Rejected';
+      case 'cancel_requested': return 'Cancellation Requested';
+      case 'cancelled': return 'Cancelled';
+      default: return 'Pending';
     }
   }
 
   IconData _statusIcon(String status) {
     switch (status) {
-      case 'approved':
-        return Icons.check_circle_rounded;
-      case 'pending':
-        return Icons.hourglass_empty_rounded;
-      case 'rejected':
-        return Icons.cancel_rounded;
-      case 'cancel_requested':
-        return Icons.pending_actions_rounded;
-      case 'cancelled':
-        return Icons.block_rounded;
-      default:
-        return Icons.hourglass_empty_rounded;
+      case 'approved': return Icons.check_circle_rounded;
+      case 'pending': return Icons.hourglass_empty_rounded;
+      case 'rejected': return Icons.cancel_rounded;
+      case 'cancel_requested': return Icons.pending_actions_rounded;
+      case 'cancelled': return Icons.block_rounded;
+      default: return Icons.hourglass_empty_rounded;
     }
   }
 
@@ -888,8 +1682,8 @@ class _MySubmissionsTab extends StatelessWidget {
       context: context,
       builder: (dialogCtx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(24)),
           backgroundColor: Colors.grey.shade50,
           title: const Text('Edit Event',
               style: TextStyle(fontWeight: FontWeight.bold)),
@@ -979,7 +1773,8 @@ class _MySubmissionsTab extends StatelessWidget {
                     slots <= 0) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
-                        content: Text('Please fill in all fields correctly.')),
+                        content:
+                            Text('Please fill in all fields correctly.')),
                   );
                   return;
                 }
@@ -1057,7 +1852,7 @@ class _MySubmissionsTab extends StatelessWidget {
     );
   }
 
-    void _showCancelDialog(BuildContext context, UserSubmittedEvent event) {
+  void _showCancelDialog(BuildContext context, UserSubmittedEvent event) {
     final bool isPending = event.status == 'pending';
     final reasonCtrl = TextEditingController();
 
@@ -1099,9 +1894,8 @@ class _MySubmissionsTab extends StatelessWidget {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Keep Event'),
-          ),
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Keep Event')),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
               backgroundColor: cbocPrimary,
@@ -1126,8 +1920,9 @@ class _MySubmissionsTab extends StatelessWidget {
                   );
                   return;
                 }
-                final result = await BackendService.requestEventCancellation(
-                    event.id, reasonCtrl.text.trim());
+                final result =
+                    await BackendService.requestEventCancellation(
+                        event.id, reasonCtrl.text.trim());
                 ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                   content: Text(result.success
                       ? 'Cancellation request submitted for admin review.'
@@ -1166,8 +1961,8 @@ class _MySubmissionsTab extends StatelessWidget {
                 const SizedBox(height: 12),
                 Text(
                   'You haven\'t submitted any events yet.',
-                  style:
-                      TextStyle(color: Colors.grey.shade400, fontSize: 14),
+                  style: TextStyle(
+                      color: Colors.grey.shade400, fontSize: 14),
                 ),
               ],
             ),
@@ -1223,13 +2018,11 @@ class _MySubmissionsTab extends StatelessWidget {
                             Icon(_statusIcon(event.status),
                                 size: 12, color: statusColor),
                             const SizedBox(width: 4),
-                            Text(
-                              _statusLabel(event.status),
-                              style: TextStyle(
-                                  fontSize: 11,
-                                  color: statusColor,
-                                  fontWeight: FontWeight.w600),
-                            ),
+                            Text(_statusLabel(event.status),
+                                style: TextStyle(
+                                    fontSize: 11,
+                                    color: statusColor,
+                                    fontWeight: FontWeight.w600)),
                           ],
                         ),
                       ),
@@ -1241,23 +2034,19 @@ class _MySubmissionsTab extends StatelessWidget {
                       const Icon(Icons.calendar_today_outlined,
                           size: 12, color: Colors.grey),
                       const SizedBox(width: 4),
-                      Text(
-                        DateFormat('MMM d, yyyy').format(event.date),
-                        style: const TextStyle(
-                            fontSize: 12, color: Colors.grey),
-                      ),
+                      Text(DateFormat('MMM d, yyyy').format(event.date),
+                          style: const TextStyle(
+                              fontSize: 12, color: Colors.grey)),
                       const SizedBox(width: 12),
                       const Icon(Icons.location_on_outlined,
                           size: 12, color: Colors.grey),
                       const SizedBox(width: 4),
                       Expanded(
-                        child: Text(
-                          event.venue,
-                          style: const TextStyle(
-                              fontSize: 12, color: Colors.grey),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                        child: Text(event.venue,
+                            style: const TextStyle(
+                                fontSize: 12, color: Colors.grey),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis),
                       ),
                     ],
                   ),
@@ -1277,8 +2066,8 @@ class _MySubmissionsTab extends StatelessWidget {
                           Expanded(
                             child: Text(
                               'Awaiting admin approval. You can cancel this submission.',
-                              style:
-                                  TextStyle(fontSize: 11, color: Colors.orange),
+                              style: TextStyle(
+                                  fontSize: 11, color: Colors.orange),
                             ),
                           ),
                         ],
@@ -1301,15 +2090,14 @@ class _MySubmissionsTab extends StatelessWidget {
                           Expanded(
                             child: Text(
                               'Cancellation pending admin approval.',
-                              style:
-                                  TextStyle(fontSize: 11, color: Colors.blue),
+                              style: TextStyle(
+                                  fontSize: 11, color: Colors.blue),
                             ),
                           ),
                         ],
                       ),
                     ),
                   ],
-                  // ── Action buttons ──────────────────────────────
                   if (canEdit || canCancel) ...[
                     const SizedBox(height: 10),
                     const Divider(height: 1),
@@ -1317,12 +2105,12 @@ class _MySubmissionsTab extends StatelessWidget {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
-                        // Edit button — only for pending events
                         if (canEdit)
                           TextButton.icon(
                             onPressed: () =>
                                 _showEditDialog(context, event),
-                            icon: const Icon(Icons.edit_outlined, size: 14),
+                            icon: const Icon(Icons.edit_outlined,
+                                size: 14),
                             label: const Text('Edit Event',
                                 style: TextStyle(fontSize: 12)),
                             style: TextButton.styleFrom(
@@ -1331,7 +2119,6 @@ class _MySubmissionsTab extends StatelessWidget {
                                   horizontal: 10, vertical: 4),
                             ),
                           ),
-                        // Cancel button — guarded by canCancel
                         if (canCancel)
                           TextButton.icon(
                             onPressed: () =>
@@ -1362,7 +2149,9 @@ class _MySubmissionsTab extends StatelessWidget {
   }
 }
 
-// ── APPROVED EVENT CARD ───────────────────────────────────────────────────────
+// =============================================================================
+// APPROVED EVENT CARD (unchanged)
+// =============================================================================
 
 class _EventCard extends StatelessWidget {
   final UpcomingEvent item;
@@ -1401,20 +2190,16 @@ class _EventCard extends StatelessWidget {
               ),
               child: Column(
                 children: [
-                  Text(
-                    DateFormat('MMM').format(item.date).toUpperCase(),
-                    style: const TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        color: cbocPrimary),
-                  ),
-                  Text(
-                    DateFormat('d').format(item.date),
-                    style: const TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: cbocPrimary),
-                  ),
+                  Text(DateFormat('MMM').format(item.date).toUpperCase(),
+                      style: const TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: cbocPrimary)),
+                  Text(DateFormat('d').format(item.date),
+                      style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: cbocPrimary)),
                 ],
               ),
             ),
@@ -1465,7 +2250,9 @@ class _EventCard extends StatelessWidget {
   }
 }
 
-// ── EVENT DETAIL BOTTOM SHEET ─────────────────────────────────────────────────
+// =============================================================================
+// EVENT DETAIL BOTTOM SHEET (unchanged)
+// =============================================================================
 
 class _EventDetailSheet extends StatefulWidget {
   final UpcomingEvent item;
@@ -1487,14 +2274,20 @@ class _EventDetailSheetState extends State<_EventDetailSheet> {
   }
 
   Future<void> _checkAttendance() async {
-    final attending = await BackendService.isAttendingEvent(widget.item.id);
-    if (mounted) setState(() { _isAttending = attending; _loading = false; });
+    final attending =
+        await BackendService.isAttendingEvent(widget.item.id);
+    if (mounted)
+      setState(() {
+        _isAttending = attending;
+        _loading = false;
+      });
   }
 
   Future<void> _handleAttend() async {
     if (_isAttending) return;
     setState(() => _rsvpInProgress = true);
-    final result = await BackendService.attendEvent(upcomingEvent: widget.item);
+    final result =
+        await BackendService.attendEvent(upcomingEvent: widget.item);
     if (mounted) {
       setState(() {
         _rsvpInProgress = false;
@@ -1511,7 +2304,8 @@ class _EventDetailSheetState extends State<_EventDetailSheet> {
   @override
   Widget build(BuildContext context) {
     final e = widget.item.event;
-    final dateStr = DateFormat('EEEE, MMMM d, yyyy').format(widget.item.date);
+    final dateStr =
+        DateFormat('EEEE, MMMM d, yyyy').format(widget.item.date);
     final timeStr =
         '${e.startTime.format(context)}  –  ${e.endTime.format(context)}';
 
@@ -1618,10 +2412,9 @@ class _EventDetailSheetState extends State<_EventDetailSheet> {
                                 child: CircularProgressIndicator(
                                     color: cbocPrimary))
                             : ElevatedButton.icon(
-                                onPressed:
-                                    _isAttending || _rsvpInProgress
-                                        ? null
-                                        : _handleAttend,
+                                onPressed: _isAttending || _rsvpInProgress
+                                    ? null
+                                    : _handleAttend,
                                 icon: _rsvpInProgress
                                     ? const SizedBox(
                                         width: 16,
@@ -1677,7 +2470,8 @@ class _EventDetailSheetState extends State<_EventDetailSheet> {
         Container(
           padding: const EdgeInsets.all(7),
           decoration: BoxDecoration(
-              color: cbocAccent, borderRadius: BorderRadius.circular(8)),
+              color: cbocAccent,
+              borderRadius: BorderRadius.circular(8)),
           child: Icon(icon, size: 16, color: cbocPrimary),
         ),
         const SizedBox(width: 12),

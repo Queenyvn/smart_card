@@ -4,7 +4,6 @@ import 'firebase_options.dart'; // auto-generated
 
 // Import pages
 import 'pages/login_page.dart';
-import 'pages/register_page.dart';
 import 'pages/home_page.dart';
 import 'pages/menu_page.dart';
 import 'pages/notification_page.dart';
@@ -76,7 +75,6 @@ class SmartCallingCardApp extends StatelessWidget {
       initialRoute: '/login',
       routes: {
         '/login': (context) => const LoginPage(),
-        '/register': (context) => const RegisterPage(),
         '/home': (context) => const HomePage(),
         '/menu': (context) => const MenuPage(),
         '/announcements': (context) => const NotificationPage(),

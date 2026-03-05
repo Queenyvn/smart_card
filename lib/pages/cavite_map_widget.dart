@@ -116,6 +116,7 @@ class _CaviteMapSectionState extends State<CaviteMapSection> {
                                       'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
                                   subdomains: const ['a', 'b', 'c', 'd'],
                                   userAgentPackageName: 'com.yourapp.smartcard',
+                                  retinaMode: RetinaMode.isHighDensity(context),
                                 ),
                                 MarkerLayer(markers: _buildMarkers(size: 32, interactive: false)),
                               ],
@@ -194,6 +195,7 @@ class _CaviteMapSectionState extends State<CaviteMapSection> {
                         subdomains: const ['a', 'b', 'c', 'd'],
                         userAgentPackageName: 'com.yourapp.smartcard',
                         maxZoom: 18,
+                        retinaMode: RetinaMode.isHighDensity(context)
                       ),
                       MarkerLayer(
                         markers: _buildMarkers(
