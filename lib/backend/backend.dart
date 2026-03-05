@@ -259,6 +259,37 @@ class ChatMessage {
   bool isReadBy(String uid) => readBy.contains(uid);
 }
 
+// =========================================================
+// ── NEW: ATTENDED EVENT MODEL
+// =========================================================
+/// Represents one attendance record (RSVP) from event_attendance.
+class AttendedEvent {
+  final String id;           // attendance doc id
+  final String eventId;
+  final String eventTitle;
+  final String venue;
+  final DateTime date;
+  final String status;       // 'attending' | 'attended' | 'cancelled'
+  final int? rating;         // 1-5, filled post-event
+  final String? feedback;    // free-text feedback
+  final bool feedbackSubmitted;
+
+  AttendedEvent({
+    required this.id,
+    required this.eventId,
+    required this.eventTitle,
+    required this.venue,
+    required this.date,
+    required this.status,
+    this.rating,
+    this.feedback,
+    required this.feedbackSubmitted,
+  });
+
+  bool get isPast =>
+      date.isBefore(DateTime.now().subtract(const Duration(hours: 1)));
+}
+
 /// ========================================================
 /// CENTRAL BACKEND SERVICE
 /// ========================================================
@@ -804,6 +835,7 @@ class BackendService {
         'venue': upcomingEvent.event.venue,
         'date': Timestamp.fromDate(upcomingEvent.date),
         'status': 'attending',
+        'feedbackSubmitted': false,
         'createdAt': Timestamp.now(),
       });
       await _firestore
@@ -1235,148 +1267,146 @@ class BackendService {
   }
 
   // =========================================================
-// PROFANITY FILTER
-// =========================================================
-static const List<String> _bannedWords = [
-  'fuck', 'shit', 'asshole', 'bitch', 'bastard', 'damn', 'crap',
-  'piss', 'cock', 'dick', 'pussy', 'cunt', 'whore', 'slut', 'faggot',
-  'nigger', 'nigga', 'retard', 'putangina', 'gago', 'tangina', 'bobo',
-  'tanga', 'ulol', 'punyeta', 'tarantado', 'leche', 'puta', 'bwisit',
-  'pakyu', 'hudas', 'inutil', 'siraulo',
-];
+  // PROFANITY FILTER
+  // =========================================================
+  static const List<String> _bannedWords = [
+    'fuck', 'shit', 'asshole', 'bitch', 'bastard', 'damn', 'crap',
+    'piss', 'cock', 'dick', 'pussy', 'cunt', 'whore', 'slut', 'faggot',
+    'nigger', 'nigga', 'retard', 'putangina', 'gago', 'tangina', 'bobo',
+    'tanga', 'ulol', 'punyeta', 'tarantado', 'leche', 'puta', 'bwisit',
+    'pakyu', 'hudas', 'inutil', 'siraulo',
+  ];
 
-static bool containsProfanity(String text) {
-  final lower = text.toLowerCase();
-  for (final word in _bannedWords) {
-    // Match whole word with optional leet-speak (simple check)
-    final pattern = RegExp(
-      r'(^|[\s,\.!?])' + RegExp.escape(word) + r'($|[\s,\.!?])',
-    );
-    if (pattern.hasMatch(lower) || lower.contains(word)) return true;
-  }
-  return false;
-}
-
-static String? validatePostContent(String content) {
-  if (content.trim().isEmpty) return 'Post cannot be empty.';
-  if (containsProfanity(content)) {
-    return 'Your post contains inappropriate language. Please revise it.';
-  }
-  return null;
-}
-
-// =========================================================
-// DELETE POST
-// =========================================================
-static Future<BackendResult> deletePost(String postId) async {
-  try {
-    final user = _auth.currentUser;
-    if (user == null) throw Exception('Not logged in');
-    final doc = await _firestore.collection('posts').doc(postId).get();
-    if (!doc.exists) return BackendResult(success: false, message: 'Post not found');
-    if (doc.data()?['uid'] != user.uid) {
-      return BackendResult(success: false, message: 'Unauthorized');
+  static bool containsProfanity(String text) {
+    final lower = text.toLowerCase();
+    for (final word in _bannedWords) {
+      final pattern = RegExp(
+        r'(^|[\s,\.!?])' + RegExp.escape(word) + r'($|[\s,\.!?])',
+      );
+      if (pattern.hasMatch(lower) || lower.contains(word)) return true;
     }
-    // Delete all comments first
-    final comments = await _firestore
-        .collection('posts').doc(postId).collection('comments').get();
-    final batch = _firestore.batch();
-    for (final c in comments.docs) batch.delete(c.reference);
-    batch.delete(_firestore.collection('posts').doc(postId));
-    await batch.commit();
-    return BackendResult(success: true);
-  } catch (e) {
-    return BackendResult(success: false, message: e.toString());
+    return false;
   }
-}
 
-// =========================================================
-// EDIT POST
-// =========================================================
-static Future<BackendResult> editPost({
-  required String postId,
-  required String newContent,
-}) async {
-  try {
-    final user = _auth.currentUser;
-    if (user == null) throw Exception('Not logged in');
-    final validation = validatePostContent(newContent);
-    if (validation != null) return BackendResult(success: false, message: validation);
-    final doc = await _firestore.collection('posts').doc(postId).get();
-    if (!doc.exists) return BackendResult(success: false, message: 'Post not found');
-    if (doc.data()?['uid'] != user.uid) {
-      return BackendResult(success: false, message: 'Unauthorized');
+  static String? validatePostContent(String content) {
+    if (content.trim().isEmpty) return 'Post cannot be empty.';
+    if (containsProfanity(content)) {
+      return 'Your post contains inappropriate language. Please revise it.';
     }
-    await _firestore.collection('posts').doc(postId).update({
-      'content': newContent.trim(),
-      'editedAt': FieldValue.serverTimestamp(),
-    });
-    return BackendResult(success: true);
-  } catch (e) {
-    return BackendResult(success: false, message: e.toString());
+    return null;
   }
-}
 
-// =========================================================
-// DELETE COMMENT
-// =========================================================
-static Future<BackendResult> deleteComment({
-  required String postId,
-  required String commentId,
-}) async {
-  try {
-    final user = _auth.currentUser;
-    if (user == null) throw Exception('Not logged in');
-    final doc = await _firestore
-        .collection('posts').doc(postId)
-        .collection('comments').doc(commentId).get();
-    if (!doc.exists) return BackendResult(success: false, message: 'Comment not found');
-    if (doc.data()?['uid'] != user.uid) {
-      return BackendResult(success: false, message: 'Unauthorized');
+  // =========================================================
+  // DELETE POST
+  // =========================================================
+  static Future<BackendResult> deletePost(String postId) async {
+    try {
+      final user = _auth.currentUser;
+      if (user == null) throw Exception('Not logged in');
+      final doc = await _firestore.collection('posts').doc(postId).get();
+      if (!doc.exists) return BackendResult(success: false, message: 'Post not found');
+      if (doc.data()?['uid'] != user.uid) {
+        return BackendResult(success: false, message: 'Unauthorized');
+      }
+      final comments = await _firestore
+          .collection('posts').doc(postId).collection('comments').get();
+      final batch = _firestore.batch();
+      for (final c in comments.docs) batch.delete(c.reference);
+      batch.delete(_firestore.collection('posts').doc(postId));
+      await batch.commit();
+      return BackendResult(success: true);
+    } catch (e) {
+      return BackendResult(success: false, message: e.toString());
     }
-    await _firestore
-        .collection('posts').doc(postId)
-        .collection('comments').doc(commentId).delete();
-    return BackendResult(success: true);
-  } catch (e) {
-    return BackendResult(success: false, message: e.toString());
   }
-}
 
-// =========================================================
-// EDIT COMMENT
-// =========================================================
-static Future<BackendResult> editComment({
-  required String postId,
-  required String commentId,
-  required String newContent,
-}) async {
-  try {
-    final user = _auth.currentUser;
-    if (user == null) throw Exception('Not logged in');
-    if (containsProfanity(newContent)) {
-      return BackendResult(
-          success: false,
-          message: 'Comment contains inappropriate language.');
+  // =========================================================
+  // EDIT POST
+  // =========================================================
+  static Future<BackendResult> editPost({
+    required String postId,
+    required String newContent,
+  }) async {
+    try {
+      final user = _auth.currentUser;
+      if (user == null) throw Exception('Not logged in');
+      final validation = validatePostContent(newContent);
+      if (validation != null) return BackendResult(success: false, message: validation);
+      final doc = await _firestore.collection('posts').doc(postId).get();
+      if (!doc.exists) return BackendResult(success: false, message: 'Post not found');
+      if (doc.data()?['uid'] != user.uid) {
+        return BackendResult(success: false, message: 'Unauthorized');
+      }
+      await _firestore.collection('posts').doc(postId).update({
+        'content': newContent.trim(),
+        'editedAt': FieldValue.serverTimestamp(),
+      });
+      return BackendResult(success: true);
+    } catch (e) {
+      return BackendResult(success: false, message: e.toString());
     }
-    final doc = await _firestore
-        .collection('posts').doc(postId)
-        .collection('comments').doc(commentId).get();
-    if (!doc.exists) return BackendResult(success: false, message: 'Comment not found');
-    if (doc.data()?['uid'] != user.uid) {
-      return BackendResult(success: false, message: 'Unauthorized');
-    }
-    await _firestore
-        .collection('posts').doc(postId)
-        .collection('comments').doc(commentId).update({
-      'content': newContent.trim(),
-      'editedAt': FieldValue.serverTimestamp(),
-    });
-    return BackendResult(success: true);
-  } catch (e) {
-    return BackendResult(success: false, message: e.toString());
   }
-}
+
+  // =========================================================
+  // DELETE COMMENT
+  // =========================================================
+  static Future<BackendResult> deleteComment({
+    required String postId,
+    required String commentId,
+  }) async {
+    try {
+      final user = _auth.currentUser;
+      if (user == null) throw Exception('Not logged in');
+      final doc = await _firestore
+          .collection('posts').doc(postId)
+          .collection('comments').doc(commentId).get();
+      if (!doc.exists) return BackendResult(success: false, message: 'Comment not found');
+      if (doc.data()?['uid'] != user.uid) {
+        return BackendResult(success: false, message: 'Unauthorized');
+      }
+      await _firestore
+          .collection('posts').doc(postId)
+          .collection('comments').doc(commentId).delete();
+      return BackendResult(success: true);
+    } catch (e) {
+      return BackendResult(success: false, message: e.toString());
+    }
+  }
+
+  // =========================================================
+  // EDIT COMMENT
+  // =========================================================
+  static Future<BackendResult> editComment({
+    required String postId,
+    required String commentId,
+    required String newContent,
+  }) async {
+    try {
+      final user = _auth.currentUser;
+      if (user == null) throw Exception('Not logged in');
+      if (containsProfanity(newContent)) {
+        return BackendResult(
+            success: false,
+            message: 'Comment contains inappropriate language.');
+      }
+      final doc = await _firestore
+          .collection('posts').doc(postId)
+          .collection('comments').doc(commentId).get();
+      if (!doc.exists) return BackendResult(success: false, message: 'Comment not found');
+      if (doc.data()?['uid'] != user.uid) {
+        return BackendResult(success: false, message: 'Unauthorized');
+      }
+      await _firestore
+          .collection('posts').doc(postId)
+          .collection('comments').doc(commentId).update({
+        'content': newContent.trim(),
+        'editedAt': FieldValue.serverTimestamp(),
+      });
+      return BackendResult(success: true);
+    } catch (e) {
+      return BackendResult(success: false, message: e.toString());
+    }
+  }
 
   // =========================================================
   // FOLLOW / UNFOLLOW
@@ -1492,6 +1522,117 @@ static Future<BackendResult> editComment({
   }
 
   // =========================================================
+  // ── NEW FEATURE 1: ATTENDED EVENTS STREAM
+  // Returns all events the current user has RSVPed to,
+  // ordered most-recent first.
+  // =========================================================
+  static Stream<List<AttendedEvent>> attendedEventsStream() {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) return Stream.value([]);
+    return _firestore
+        .collection('event_attendance')
+        .where('uid', isEqualTo: uid)
+        .snapshots()
+        .map((snap) {
+      final list = snap.docs.map((doc) {
+        final d = doc.data();
+        return AttendedEvent(
+          id: doc.id,
+          eventId: d['eventId'] ?? '',
+          eventTitle: d['eventTitle'] ?? '',
+          venue: d['venue'] ?? '',
+          date: (d['date'] as Timestamp?)?.toDate() ?? DateTime.now(),
+          status: d['status'] ?? 'attending',
+          rating: d['rating'] as int?,
+          feedback: d['feedback'] as String?,
+          feedbackSubmitted: d['feedbackSubmitted'] == true,
+        );
+      }).toList();
+      list.sort((a, b) => b.date.compareTo(a.date));
+      return list;
+    });
+  }
+
+  // =========================================================
+  // ── NEW FEATURE 2: SUBMIT POST-EVENT FEEDBACK
+  // Called after an event has passed; stores rating + notes.
+  // =========================================================
+  static Future<BackendResult> submitAttendanceFeedback({
+    required String attendanceId,
+    required int rating,        // 1–5
+    required String feedback,
+  }) async {
+    try {
+      final uid = _auth.currentUser?.uid;
+      if (uid == null) throw Exception('Not logged in');
+      if (rating < 1 || rating > 5) {
+        return BackendResult(success: false, message: 'Rating must be 1–5.');
+      }
+      final doc = await _firestore
+          .collection('event_attendance')
+          .doc(attendanceId)
+          .get();
+      if (!doc.exists) {
+        return BackendResult(success: false, message: 'Record not found.');
+      }
+      if (doc.data()?['uid'] != uid) {
+        return BackendResult(success: false, message: 'Unauthorized.');
+      }
+      await _firestore
+          .collection('event_attendance')
+          .doc(attendanceId)
+          .update({
+        'rating': rating,
+        'feedback': feedback.trim(),
+        'feedbackSubmitted': true,
+        'status': 'attended',
+        'feedbackAt': FieldValue.serverTimestamp(),
+      });
+      return BackendResult(success: true);
+    } catch (e) {
+      return BackendResult(success: false, message: e.toString());
+    }
+  }
+
+  // =========================================================
+  // ── NEW FEATURE 3: MY SCHEDULE STREAM
+  // Returns upcoming RSVPed events for the personal schedule
+  // calendar — only future (or today) events, ordered by date.
+  // =========================================================
+  static Stream<List<AttendedEvent>> myScheduleStream() {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) return Stream.value([]);
+    final today = DateTime(
+        DateTime.now().year, DateTime.now().month, DateTime.now().day);
+    return _firestore
+        .collection('event_attendance')
+        .where('uid', isEqualTo: uid)
+        .where('status', isEqualTo: 'attending')
+        .snapshots()
+        .map((snap) {
+      final list = snap.docs
+          .map((doc) {
+            final d = doc.data();
+            return AttendedEvent(
+              id: doc.id,
+              eventId: d['eventId'] ?? '',
+              eventTitle: d['eventTitle'] ?? '',
+              venue: d['venue'] ?? '',
+              date: (d['date'] as Timestamp?)?.toDate() ?? DateTime.now(),
+              status: d['status'] ?? 'attending',
+              rating: d['rating'] as int?,
+              feedback: d['feedback'] as String?,
+              feedbackSubmitted: d['feedbackSubmitted'] == true,
+            );
+          })
+          .where((e) => !e.date.isBefore(today))
+          .toList();
+      list.sort((a, b) => a.date.compareTo(b.date));
+      return list;
+    });
+  }
+
+  // =========================================================
   // ── MESSAGING ─────────────────────────────────────────────
   // =========================================================
 
@@ -1517,44 +1658,42 @@ static Future<BackendResult> editComment({
 
   /// Stream of all conversations for the current user.
   static Stream<List<Conversation>> conversationsStream() {
-  final uid = _auth.currentUser?.uid;
-  if (uid == null) return Stream.value([]);
-  return _firestore
-      .collection('conversations')
-      .where('participants', arrayContains: uid)
-      .snapshots()
-      .map((snap) {
-        final convs = snap.docs.map((doc) {
-          final d = doc.data();
-          return Conversation(
-            id: doc.id,
-            participants: List<String>.from(d['participants'] ?? []),
-            participantNames: Map<String, String>.from(
-                (d['participantNames'] as Map? ?? {}).map(
-                    (k, v) => MapEntry(k.toString(), v.toString()))),
-            participantLogos: Map<String, String?>.from(
-                (d['participantLogos'] as Map? ?? {}).map(
-                    (k, v) => MapEntry(k.toString(), v as String?))),
-            isMutual: d['isMutual'] == true,
-            lastMessage: d['lastMessage'] as String? ?? '',
-            lastMessageTime: (d['lastMessageTime'] as Timestamp?)?.toDate(),
-            lastSenderId: d['lastSenderId'] as String? ?? '',
-            unreadCount: (d['unreadCount_$uid'] as int?) ?? 0,
-          );
-        }).toList();  // ← semicolon here, NOT closing paren
-        convs.sort((a, b) {
-          final aTime = a.lastMessageTime;
-          final bTime = b.lastMessageTime;
-          if (aTime == null && bTime == null) return 0;
-          if (aTime == null) return 1;
-          if (bTime == null) return -1;
-          return bTime.compareTo(aTime);
-        });
-        return convs;
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) return Stream.value([]);
+    return _firestore
+        .collection('conversations')
+        .where('participants', arrayContains: uid)
+        .snapshots()
+        .map((snap) {
+      final convs = snap.docs.map((doc) {
+        final d = doc.data();
+        return Conversation(
+          id: doc.id,
+          participants: List<String>.from(d['participants'] ?? []),
+          participantNames: Map<String, String>.from(
+              (d['participantNames'] as Map? ?? {}).map(
+                  (k, v) => MapEntry(k.toString(), v.toString()))),
+          participantLogos: Map<String, String?>.from(
+              (d['participantLogos'] as Map? ?? {}).map(
+                  (k, v) => MapEntry(k.toString(), v as String?))),
+          isMutual: d['isMutual'] == true,
+          lastMessage: d['lastMessage'] as String? ?? '',
+          lastMessageTime: (d['lastMessageTime'] as Timestamp?)?.toDate(),
+          lastSenderId: d['lastSenderId'] as String? ?? '',
+          unreadCount: (d['unreadCount_$uid'] as int?) ?? 0,
+        );
+      }).toList();
+      convs.sort((a, b) {
+        final aTime = a.lastMessageTime;
+        final bTime = b.lastMessageTime;
+        if (aTime == null && bTime == null) return 0;
+        if (aTime == null) return 1;
+        if (bTime == null) return -1;
+        return bTime.compareTo(aTime);
       });
-}
-
-    
+      return convs;
+    });
+  }
 
   /// Stream of messages inside a conversation.
   static Stream<List<ChatMessage>> messagesStream(String convId) {
@@ -1583,18 +1722,13 @@ static Future<BackendResult> editComment({
                 text: d['text'] as String? ?? '',
                 type: type,
                 attachmentUrl: d['attachmentUrl'] as String?,
-                attachmentName:
-                    d['attachmentName'] as String?,
-                timestamp:
-                    (d['timestamp'] as Timestamp?)?.toDate(),
-                readBy:
-                    List<String>.from(d['readBy'] ?? []),
+                attachmentName: d['attachmentName'] as String?,
+                timestamp: (d['timestamp'] as Timestamp?)?.toDate(),
+                readBy: List<String>.from(d['readBy'] ?? []),
                 deleted: d['deleted'] == true,
-                forwardedFrom:
-                    d['forwardedFrom'] as String?,
+                forwardedFrom: d['forwardedFrom'] as String?,
               );
             }).toList());
-            
   }
 
   /// Find or create a conversation between the current user and [otherId].
@@ -1614,26 +1748,15 @@ static Future<BackendResult> editComment({
         await _firestore.collection('users').doc(myUid).get();
     final otherDoc =
         await _firestore.collection('users').doc(otherId).get();
-    final myName =
-        myDoc.data()?['name'] as String? ?? 'Me';
-    final otherName =
-        otherDoc.data()?['name'] as String? ?? 'User';
-    final myLogo =
-        myDoc.data()?['logoUrl'] as String?;
-    final otherLogo =
-        otherDoc.data()?['logoUrl'] as String?;
+    final myName = myDoc.data()?['name'] as String? ?? 'Me';
+    final otherName = otherDoc.data()?['name'] as String? ?? 'User';
+    final myLogo = myDoc.data()?['logoUrl'] as String?;
+    final otherLogo = otherDoc.data()?['logoUrl'] as String?;
     final mutual = await areMutual(myUid, otherId);
-    final ref =
-        await _firestore.collection('conversations').add({
+    final ref = await _firestore.collection('conversations').add({
       'participants': [myUid, otherId],
-      'participantNames': {
-        myUid: myName,
-        otherId: otherName
-      },
-      'participantLogos': {
-        myUid: myLogo,
-        otherId: otherLogo
-      },
+      'participantNames': {myUid: myName, otherId: otherName},
+      'participantLogos': {myUid: myLogo, otherId: otherLogo},
       'isMutual': mutual,
       'lastMessage': '',
       'lastMessageTime': FieldValue.serverTimestamp(),
@@ -1651,43 +1774,33 @@ static Future<BackendResult> editComment({
     await _sendMessage(convId: convId, text: text, type: 'text');
   }
 
-  /// Send an image message — uploads bytes to Cloudinary (web + mobile safe).
+  /// Send an image message.
   static Future<void> sendImageMessage(
       String convId, Uint8List bytes, String fileName) async {
     final uploadName =
         'chat_${DateTime.now().millisecondsSinceEpoch}_$fileName';
     final url = await _uploadToCloudinary(
-      bytes,
-      uploadName,
-      folder: 'chat_images',
-      resourceType: 'image',
+      bytes, uploadName,
+      folder: 'chat_images', resourceType: 'image',
     );
     await _sendMessage(
-      convId: convId,
-      text: '',
-      type: 'image',
-      attachmentUrl: url,
-      attachmentName: fileName,
+      convId: convId, text: '', type: 'image',
+      attachmentUrl: url, attachmentName: fileName,
     );
   }
 
-  /// Send a file message — uploads bytes to Cloudinary (web + mobile safe).
+  /// Send a file message.
   static Future<void> sendFileMessage(
       String convId, Uint8List bytes, String fileName) async {
     final uploadName =
         'chat_${DateTime.now().millisecondsSinceEpoch}_$fileName';
     final url = await _uploadToCloudinary(
-      bytes,
-      uploadName,
-      folder: 'chat_files',
-      resourceType: 'raw',
+      bytes, uploadName,
+      folder: 'chat_files', resourceType: 'raw',
     );
     await _sendMessage(
-      convId: convId,
-      text: '',
-      type: 'file',
-      attachmentUrl: url,
-      attachmentName: fileName,
+      convId: convId, text: '', type: 'file',
+      attachmentUrl: url, attachmentName: fileName,
     );
   }
 
@@ -1707,7 +1820,7 @@ static Future<BackendResult> editComment({
     );
   }
 
-  /// Soft-delete a message (sender only — enforced in UI).
+  /// Soft-delete a message.
   static Future<void> deleteMessage(
       String convId, String msgId) async {
     await _firestore
@@ -1715,21 +1828,16 @@ static Future<BackendResult> editComment({
         .doc(convId)
         .collection('messages')
         .doc(msgId)
-        .update({
-      'deleted': true,
-      'text': 'This message was deleted'
-    });
+        .update({'deleted': true, 'text': 'This message was deleted'});
   }
 
-  /// Mark all messages in [convId] as read and reset the unread counter.
+  /// Mark all messages in [convId] as read.
   static Future<void> markConversationRead(String convId) async {
     final uid = currentUid;
     await _firestore
         .collection('conversations')
         .doc(convId)
         .update({'unreadCount_$uid': 0});
-    // Fetch all messages and filter client-side — avoids needing
-    // a composite index for isNotEqualTo on web.
     final msgs = await _firestore
         .collection('conversations')
         .doc(convId)
@@ -1739,8 +1847,7 @@ static Future<BackendResult> editComment({
     for (final m in msgs.docs) {
       final data = m.data();
       if (data['senderId'] == uid) continue;
-      final readBy =
-          List<String>.from(data['readBy'] ?? []);
+      final readBy = List<String>.from(data['readBy'] ?? []);
       if (!readBy.contains(uid)) {
         batch.update(m.reference,
             {'readBy': FieldValue.arrayUnion([uid])});
@@ -1795,16 +1902,13 @@ static Future<BackendResult> editComment({
       final d = doc.data();
       return Conversation(
         id: doc.id,
-        participants:
-            List<String>.from(d['participants'] ?? []),
+        participants: List<String>.from(d['participants'] ?? []),
         participantNames: Map<String, String>.from(
             (d['participantNames'] as Map? ?? {}).map(
-                (k, v) =>
-                    MapEntry(k.toString(), v.toString()))),
+                (k, v) => MapEntry(k.toString(), v.toString()))),
         participantLogos: Map<String, String?>.from(
             (d['participantLogos'] as Map? ?? {}).map(
-                (k, v) =>
-                    MapEntry(k.toString(), v as String?))),
+                (k, v) => MapEntry(k.toString(), v as String?))),
         isMutual: d['isMutual'] == true,
         lastMessage: d['lastMessage'] as String? ?? '',
         lastMessageTime:
@@ -1844,8 +1948,7 @@ static Future<BackendResult> editComment({
     final participants =
         List<String>.from(convDoc.data()?['participants'] ?? []);
     final otherId = participants.firstWhere(
-        (id) => id != uid,
-        orElse: () => '');
+        (id) => id != uid, orElse: () => '');
     await _firestore
         .collection('conversations')
         .doc(convId)
