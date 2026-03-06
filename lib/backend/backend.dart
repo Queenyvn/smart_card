@@ -1919,7 +1919,7 @@ class BackendService {
     }).toList();
   }
 
-  // ── Private helpers ──────────────────────────────────────
+  // ========= Private helpers ==========================================================
 
   static String _typeString(ChatMessageType t) {
     switch (t) {
