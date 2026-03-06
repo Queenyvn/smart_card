@@ -124,6 +124,48 @@ class BusinessPin {
 }
 
 // =========================================================
+// BUSINESS MODEL
+// Single collection 'businesses' with status: pending | approved | rejected
+// =========================================================
+class BusinessRecord {
+  final String id;           // Firestore doc id in 'businesses'
+  final String uid;          // owner uid
+  final String name;
+  final String desc;
+  final String address;
+  final String phone;
+  final double? lat;
+  final double? lng;
+  final String? logoUrl;
+  final String? dtiDocumentUrl;
+  final String? dtiFileName;
+  final String status;       // 'pending' | 'approved' | 'rejected'
+  final String? rejectionReason;
+  final DateTime submittedAt;
+
+  BusinessRecord({
+    required this.id,
+    required this.uid,
+    required this.name,
+    required this.desc,
+    required this.address,
+    required this.phone,
+    this.lat,
+    this.lng,
+    this.logoUrl,
+    this.dtiDocumentUrl,
+    this.dtiFileName,
+    required this.status,
+    this.rejectionReason,
+    required this.submittedAt,
+  });
+
+  bool get isApproved => status == 'approved';
+  bool get isPending => status == 'pending';
+  bool get isRejected => status == 'rejected';
+}
+
+// =========================================================
 // POST MODEL
 // =========================================================
 class Post {
@@ -260,18 +302,17 @@ class ChatMessage {
 }
 
 // =========================================================
-// ── NEW: ATTENDED EVENT MODEL
+// ── ATTENDED EVENT MODEL
 // =========================================================
-/// Represents one attendance record (RSVP) from event_attendance.
 class AttendedEvent {
-  final String id;           // attendance doc id
+  final String id;
   final String eventId;
   final String eventTitle;
   final String venue;
   final DateTime date;
-  final String status;       // 'attending' | 'attended' | 'cancelled'
-  final int? rating;         // 1-5, filled post-event
-  final String? feedback;    // free-text feedback
+  final String status;
+  final int? rating;
+  final String? feedback;
   final bool feedbackSubmitted;
 
   AttendedEvent({
@@ -296,7 +337,6 @@ class AttendedEvent {
 class BackendService {
   static final FirebaseAuth _auth = FirebaseAuth.instance;
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  // No FirebaseStorage — all uploads go through Cloudinary.
 
   static List<CalendarEvent> getEventsForDay(DateTime day) => [];
 
@@ -329,14 +369,12 @@ class BackendService {
         password: password.trim(),
       );
       final user = userCredential.user!;
-      final userDoc =
-          await _firestore.collection('users').doc(user.uid).get();
+      final userDoc = await _firestore.collection('users').doc(user.uid).get();
       if (!userDoc.exists) {
         await _auth.signOut();
         return BackendResult(
           success: false,
-          message:
-              "User profile not found. Please contact administrator.",
+          message: "User profile not found. Please contact administrator.",
         );
       }
       final userData = userDoc.data()!;
@@ -352,8 +390,7 @@ class BackendService {
       if (userData['approved'] != true) {
         await _auth.signOut();
         return BackendResult(
-            success: false,
-            message: "Account not yet approved by admin.");
+            success: false, message: "Account not yet approved by admin.");
       }
       return BackendResult(success: true);
     } on FirebaseAuthException catch (e) {
@@ -380,8 +417,7 @@ class BackendService {
       return BackendResult(success: false, message: message);
     } catch (e) {
       return BackendResult(
-          success: false,
-          message: "An error occurred: ${e.toString()}");
+          success: false, message: "An error occurred: ${e.toString()}");
     }
   }
 
@@ -418,8 +454,7 @@ class BackendService {
         } catch (e) {
           return BackendResult(
               success: false,
-              message:
-                  "Failed to upload OR document: ${e.toString()}");
+              message: "Failed to upload OR document: ${e.toString()}");
         }
       }
       await _firestore.collection('users').doc(googleUser.uid).set({
@@ -438,8 +473,7 @@ class BackendService {
       return BackendResult(success: true);
     } catch (e) {
       return BackendResult(
-          success: false,
-          message: "An error occurred: ${e.toString()}");
+          success: false, message: "An error occurred: ${e.toString()}");
     }
   }
 
@@ -495,11 +529,9 @@ class BackendService {
     try {
       final user = _auth.currentUser;
       if (user == null) throw Exception('User not logged in');
-      final doc =
-          await _firestore.collection('events').doc(eventId).get();
+      final doc = await _firestore.collection('events').doc(eventId).get();
       if (!doc.exists)
-        return BackendResult(
-            success: false, message: 'Event not found');
+        return BackendResult(success: false, message: 'Event not found');
       final data = doc.data()!;
       if (data['createdBy'] != user.uid)
         return BackendResult(success: false, message: 'Unauthorized');
@@ -530,16 +562,13 @@ class BackendService {
   // =========================================================
   // CANCEL PENDING EVENT
   // =========================================================
-  static Future<BackendResult> cancelPendingEvent(
-      String eventId) async {
+  static Future<BackendResult> cancelPendingEvent(String eventId) async {
     try {
       final user = _auth.currentUser;
       if (user == null) throw Exception('User not logged in');
-      final doc =
-          await _firestore.collection('events').doc(eventId).get();
+      final doc = await _firestore.collection('events').doc(eventId).get();
       if (!doc.exists)
-        return BackendResult(
-            success: false, message: 'Event not found');
+        return BackendResult(success: false, message: 'Event not found');
       final data = doc.data()!;
       if (data['createdBy'] != user.uid)
         return BackendResult(success: false, message: 'Unauthorized');
@@ -566,11 +595,9 @@ class BackendService {
     try {
       final user = _auth.currentUser;
       if (user == null) throw Exception('User not logged in');
-      final doc =
-          await _firestore.collection('events').doc(eventId).get();
+      final doc = await _firestore.collection('events').doc(eventId).get();
       if (!doc.exists)
-        return BackendResult(
-            success: false, message: 'Event not found');
+        return BackendResult(success: false, message: 'Event not found');
       final data = doc.data()!;
       if (data['createdBy'] != user.uid)
         return BackendResult(success: false, message: 'Unauthorized');
@@ -579,12 +606,14 @@ class BackendService {
         'cancelReason': reason.trim(),
         'cancelRequestedAt': FieldValue.serverTimestamp(),
       });
-      await _firestore.collection('admin_notifications').add({
+      // Notify admin via user_notifications to avoid needing admin_notifications
+      await _firestore.collection('user_notifications').add({
         'type': 'cancel_request',
         'eventId': eventId,
         'eventTitle': data['title'],
         'requestedBy': user.uid,
         'reason': reason.trim(),
+        'isAdminNotif': true,
         'read': false,
         'createdAt': FieldValue.serverTimestamp(),
       });
@@ -600,11 +629,9 @@ class BackendService {
   static Future<BackendResult> adminApproveCancellation(
       String eventId) async {
     try {
-      final doc =
-          await _firestore.collection('events').doc(eventId).get();
+      final doc = await _firestore.collection('events').doc(eventId).get();
       if (!doc.exists)
-        return BackendResult(
-            success: false, message: 'Event not found');
+        return BackendResult(success: false, message: 'Event not found');
       final data = doc.data()!;
       await _firestore.collection('events').doc(eventId).update({
         'status': 'cancelled',
@@ -620,8 +647,7 @@ class BackendService {
       for (final attendee in attendees.docs) {
         final attendeeUid = attendee.data()['uid'] as String?;
         if (attendeeUid == null) continue;
-        final notifRef =
-            _firestore.collection('user_notifications').doc();
+        final notifRef = _firestore.collection('user_notifications').doc();
         batch.set(notifRef, {
           'uid': attendeeUid,
           'type': 'event_cancelled',
@@ -655,17 +681,15 @@ class BackendService {
         return UpcomingEvent(
           id: doc.id,
           date: date,
-          availableSlots:
-              (d['availableSlots'] as num?)?.toInt() ?? 0,
+          availableSlots: (d['availableSlots'] as num?)?.toInt() ?? 0,
           event: CalendarEvent(
             title: d['title'],
             venue: d['venue'],
             description: d['description'],
             imageUrl: d['imageUrl'],
-            startTime: TimeOfDay(
-                hour: d['startHour'], minute: d['startMinute']),
-            endTime: TimeOfDay(
-                hour: d['endHour'], minute: d['endMinute']),
+            startTime:
+                TimeOfDay(hour: d['startHour'], minute: d['startMinute']),
+            endTime: TimeOfDay(hour: d['endHour'], minute: d['endMinute']),
             approved: true,
           ),
         );
@@ -690,8 +714,7 @@ class BackendService {
         if (rawDate == null) return null;
         final date = (rawDate as Timestamp).toDate();
         String status = d['status'] as String? ?? 'pending';
-        if (d['approved'] == true && status == 'pending')
-          status = 'approved';
+        if (d['approved'] == true && status == 'pending') status = 'approved';
         return UserSubmittedEvent(
           id: doc.id,
           title: d['title'] ?? '',
@@ -699,14 +722,11 @@ class BackendService {
           description: d['description'] ?? '',
           date: date,
           startTime: TimeOfDay(
-              hour: d['startHour'] ?? 0,
-              minute: d['startMinute'] ?? 0),
-          endTime: TimeOfDay(
-              hour: d['endHour'] ?? 0,
-              minute: d['endMinute'] ?? 0),
+              hour: d['startHour'] ?? 0, minute: d['startMinute'] ?? 0),
+          endTime:
+              TimeOfDay(hour: d['endHour'] ?? 0, minute: d['endMinute'] ?? 0),
           status: status,
-          availableSlots:
-              (d['availableSlots'] as num?)?.toInt() ?? 0,
+          availableSlots: (d['availableSlots'] as num?)?.toInt() ?? 0,
           posterUrl: d['imageUrl'],
         );
       }).whereType<UserSubmittedEvent>().toList();
@@ -753,8 +773,7 @@ class BackendService {
         .where('approved', isEqualTo: true)
         .where('status', isEqualTo: 'approved')
         .where('date',
-            isGreaterThanOrEqualTo:
-                Timestamp.fromDate(DateTime.now()))
+            isGreaterThanOrEqualTo: Timestamp.fromDate(DateTime.now()))
         .orderBy('date')
         .limit(5)
         .snapshots()
@@ -765,17 +784,15 @@ class BackendService {
         return UpcomingEvent(
           id: doc.id,
           date: date,
-          availableSlots:
-              (d['availableSlots'] as num?)?.toInt() ?? 0,
+          availableSlots: (d['availableSlots'] as num?)?.toInt() ?? 0,
           event: CalendarEvent(
             title: d['title'],
             venue: d['venue'],
             description: d['description'],
             imageUrl: d['imageUrl'],
-            startTime: TimeOfDay(
-                hour: d['startHour'], minute: d['startMinute']),
-            endTime: TimeOfDay(
-                hour: d['endHour'], minute: d['endMinute']),
+            startTime:
+                TimeOfDay(hour: d['startHour'], minute: d['startMinute']),
+            endTime: TimeOfDay(hour: d['endHour'], minute: d['endMinute']),
             approved: true,
           ),
         );
@@ -825,8 +842,7 @@ class BackendService {
           .get();
       if (existing.docs.isNotEmpty) {
         return BackendResult(
-            success: false,
-            message: 'Already attending this event');
+            success: false, message: 'Already attending this event');
       }
       await _firestore.collection('event_attendance').add({
         'uid': uid,
@@ -838,10 +854,7 @@ class BackendService {
         'feedbackSubmitted': false,
         'createdAt': Timestamp.now(),
       });
-      await _firestore
-          .collection('events')
-          .doc(upcomingEvent.id)
-          .update({
+      await _firestore.collection('events').doc(upcomingEvent.id).update({
         'availableSlots': FieldValue.increment(-1),
       });
       return BackendResult(success: true);
@@ -870,8 +883,7 @@ class BackendService {
   // NOTIFY EVENT CREATOR WHEN APPROVED
   // =========================================================
   static Future<void> notifyEventApproved(String eventId) async {
-    final doc =
-        await _firestore.collection('events').doc(eventId).get();
+    final doc = await _firestore.collection('events').doc(eventId).get();
     if (!doc.exists) return;
     final data = doc.data()!;
     final creatorUid = data['createdBy'] as String?;
@@ -880,8 +892,7 @@ class BackendService {
       'uid': creatorUid,
       'type': 'event_approved',
       'title': 'Event Approved!',
-      'body':
-          '"${data['title']}" has been approved and is now live.',
+      'body': '"${data['title']}" has been approved and is now live.',
       'eventId': eventId,
       'read': false,
       'createdAt': FieldValue.serverTimestamp(),
@@ -898,10 +909,9 @@ class BackendService {
   static Future<Map<String, dynamic>?> fetchUserProfile() async {
     final user = _auth.currentUser;
     if (user == null) return null;
-    final doc =
-        await _firestore.collection('users').doc(user.uid).get();
+    final doc = await _firestore.collection('users').doc(user.uid).get();
     if (!doc.exists) return null;
-    return doc.data();
+    return doc.data()!;
   }
 
   static Future<BackendResult> saveUserProfile({
@@ -909,25 +919,307 @@ class BackendService {
     required String phone,
     required String address,
     Map<String, dynamic>? location,
-    List<Map<String, dynamic>>? businesses,
   }) async {
     try {
       final user = _auth.currentUser;
       if (user == null) throw Exception('User not logged in');
-      await _firestore
-          .collection('users')
-          .doc(user.uid)
-          .set({
+      await _firestore.collection('users').doc(user.uid).set({
         'name': name.trim(),
         'phone': phone.trim(),
         'address': address.trim(),
-        'location': location,
+        if (location != null) 'location': location,
         'updatedAt': FieldValue.serverTimestamp(),
-        'businesses': businesses,
       }, SetOptions(merge: true));
       return BackendResult(success: true);
     } catch (e) {
       return BackendResult(success: false, message: e.toString());
+    }
+  }
+
+  // =========================================================
+  // SUBMIT BUSINESS
+  // Stored directly in 'businesses' collection with status: 'pending'.
+  // Admin approves → status becomes 'approved'.
+  // No data is duplicated or moved; same doc, status field changes.
+  // =========================================================
+  static Future<BackendResult> submitBusiness({
+    required String name,
+    required String desc,
+    required String address,
+    required String phone,
+    double? lat,
+    double? lng,
+    String? logoUrl,
+    required Uint8List dtiDocBytes,
+    required String dtiFileName,
+  }) async {
+    try {
+      final user = _auth.currentUser;
+      if (user == null) throw Exception('User not logged in');
+
+      // Upload DTI document to Cloudinary
+      String dtiUrl;
+      try {
+        dtiUrl = await _uploadToCloudinary(
+          dtiDocBytes,
+          dtiFileName,
+          folder: 'dti_documents',
+          resourceType: 'raw',
+        );
+      } catch (e) {
+        return BackendResult(
+            success: false,
+            message: 'Failed to upload DTI document: ${e.toString()}');
+      }
+
+      final userDoc =
+          await _firestore.collection('users').doc(user.uid).get();
+      final userName = userDoc.data()?['name'] as String? ?? 'Unknown';
+
+      // Write directly to 'businesses' collection with status: pending
+      final docRef = await _firestore.collection('businesses').add({
+        'uid': user.uid,
+        'userName': userName,
+        'name': name.trim(),
+        'desc': desc.trim(),
+        'address': address.trim(),
+        'phone': phone.trim(),
+        if (lat != null) 'lat': lat,
+        if (lng != null) 'lng': lng,
+        'logoUrl': logoUrl,
+        'dtiDocumentUrl': dtiUrl,
+        'dtiFileName': dtiFileName,
+        'status': 'pending',   // pending | approved | rejected
+        'submittedAt': FieldValue.serverTimestamp(),
+      });
+
+      // Notify admin (reuse user_notifications with isAdminNotif flag
+      // to avoid needing a separate admin_notifications collection)
+      await _firestore.collection('user_notifications').add({
+        'type': 'business_approval_request',
+        'businessId': docRef.id,
+        'businessName': name.trim(),
+        'submittedBy': user.uid,
+        'userName': userName,
+        'isAdminNotif': true,
+        'read': false,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      return BackendResult(success: true, message: docRef.id);
+    } catch (e) {
+      return BackendResult(success: false, message: e.toString());
+    }
+  }
+
+  // =========================================================
+  // MY BUSINESSES STREAM
+  // Returns ALL businesses for the current user from the single
+  // 'businesses' collection, regardless of status.
+  // =========================================================
+  static Stream<List<BusinessRecord>> myBusinessesStream() {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) return Stream.value([]);
+    return _firestore
+        .collection('businesses')
+        .where('uid', isEqualTo: uid)
+        .snapshots()
+        .map((snap) {
+      final list = snap.docs.map((doc) {
+        final d = doc.data();
+        return BusinessRecord(
+          id: doc.id,
+          uid: d['uid'] as String? ?? '',
+          name: d['name'] as String? ?? '',
+          desc: d['desc'] as String? ?? '',
+          address: d['address'] as String? ?? '',
+          phone: d['phone'] as String? ?? '',
+          lat: (d['lat'] as num?)?.toDouble(),
+          lng: (d['lng'] as num?)?.toDouble(),
+          logoUrl: d['logoUrl'] as String?,
+          dtiDocumentUrl: d['dtiDocumentUrl'] as String?,
+          dtiFileName: d['dtiFileName'] as String?,
+          status: d['status'] as String? ?? 'pending',
+          rejectionReason: d['rejectionReason'] as String?,
+          submittedAt:
+              (d['submittedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+        );
+      }).toList();
+      list.sort((a, b) => b.submittedAt.compareTo(a.submittedAt));
+      return list;
+    });
+  }
+
+  // =========================================================
+  // ADMIN: APPROVE BUSINESS
+  // Just flips status to 'approved' in the same doc. No data moved.
+  // =========================================================
+  static Future<BackendResult> adminApproveBusiness(
+      String businessId) async {
+    try {
+      final doc =
+          await _firestore.collection('businesses').doc(businessId).get();
+      if (!doc.exists) {
+        return BackendResult(success: false, message: 'Business not found');
+      }
+      final data = doc.data()!;
+      final ownerUid = data['uid'] as String?;
+      if (ownerUid == null) {
+        return BackendResult(success: false, message: 'Owner UID missing');
+      }
+
+      // Simply update status — same doc, no duplication
+      await _firestore.collection('businesses').doc(businessId).update({
+        'status': 'approved',
+        'approvedAt': FieldValue.serverTimestamp(),
+      });
+
+      // Notify the business owner
+      await _firestore.collection('user_notifications').add({
+        'uid': ownerUid,
+        'type': 'business_approved',
+        'title': 'Business Approved! 🎉',
+        'body':
+            '"${data['name']}" has been approved and is now visible on the map.',
+        'businessId': businessId,
+        'read': false,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      return BackendResult(success: true);
+    } catch (e) {
+      return BackendResult(success: false, message: e.toString());
+    }
+  }
+
+  // =========================================================
+  // ADMIN: REJECT BUSINESS
+  // Just flips status to 'rejected' with a reason. No data moved.
+  // =========================================================
+  static Future<BackendResult> adminRejectBusiness(
+      String businessId, String reason) async {
+    try {
+      final doc =
+          await _firestore.collection('businesses').doc(businessId).get();
+      if (!doc.exists) {
+        return BackendResult(success: false, message: 'Business not found');
+      }
+      final data = doc.data()!;
+      final ownerUid = data['uid'] as String?;
+
+      await _firestore.collection('businesses').doc(businessId).update({
+        'status': 'rejected',
+        'rejectionReason': reason.trim(),
+        'rejectedAt': FieldValue.serverTimestamp(),
+      });
+
+      if (ownerUid != null) {
+        await _firestore.collection('user_notifications').add({
+          'uid': ownerUid,
+          'type': 'business_rejected',
+          'title': 'Business Submission Rejected',
+          'body':
+              '"${data['name']}" was not approved. Reason: ${reason.trim()}',
+          'businessId': businessId,
+          'read': false,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+      }
+
+      return BackendResult(success: true);
+    } catch (e) {
+      return BackendResult(success: false, message: e.toString());
+    }
+  }
+
+  // =========================================================
+  // FETCH CAVITE BUSINESS PINS
+  // Only shows approved businesses from the 'businesses' collection.
+  // =========================================================
+  static Future<List<BusinessPin>> fetchCaviteBusinessPins() async {
+    const double minLat = 14.10;
+    const double maxLat = 14.50;
+    const double minLng = 120.60;
+    const double maxLng = 121.10;
+
+    final approvedSnap = await _firestore
+        .collection('businesses')
+        .where('status', isEqualTo: 'approved')
+        .get();
+
+    final List<BusinessPin> pins = [];
+
+    for (final doc in approvedSnap.docs) {
+      final b = doc.data();
+      final lat = (b['lat'] as num?)?.toDouble();
+      final lng = (b['lng'] as num?)?.toDouble();
+      if (lat == null || lng == null) continue;
+      if (lat < minLat || lat > maxLat || lng < minLng || lng > maxLng) {
+        continue;
+      }
+
+      final ownerUid = b['uid'] as String? ?? '';
+      String ownerName = b['userName'] as String? ?? '';
+      String ownerEmail = '';
+      String ownerUserType = '';
+
+      if (ownerUid.isNotEmpty) {
+        try {
+          final ownerDoc =
+              await _firestore.collection('users').doc(ownerUid).get();
+          if (ownerDoc.exists) {
+            ownerName = ownerDoc.data()?['name'] as String? ?? ownerName;
+            ownerEmail = ownerDoc.data()?['email'] as String? ?? '';
+            ownerUserType = ownerDoc.data()?['userType'] as String? ?? '';
+          }
+        } catch (_) {}
+      }
+
+      pins.add(BusinessPin(
+        uid: ownerUid,
+        name: ownerName,
+        businessName: b['name'] as String? ?? 'Unknown',
+        userType: ownerUserType,
+        email: ownerEmail,
+        phone: b['phone'] as String? ?? '',
+        lat: lat,
+        lng: lng,
+        address: b['address'] as String? ?? '',
+        logoUrl: b['logoUrl'] as String?,
+        businessDesc: b['desc'] as String? ?? '',
+      ));
+    }
+
+    return pins;
+  }
+
+  // =========================================================
+  // UPLOAD LOGO
+  // =========================================================
+  static Future<String?> uploadLogoImage(
+      Uint8List bytes, String fileName) async {
+    try {
+      return await _uploadToCloudinary(bytes, fileName,
+          folder: 'business_logos', resourceType: 'image');
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // =========================================================
+  // UPLOAD DTI DOCUMENT
+  // =========================================================
+  static Future<String?> uploadDtiDocument(
+      Uint8List bytes, String fileName) async {
+    try {
+      return await _uploadToCloudinary(
+        bytes,
+        fileName,
+        folder: 'dti_documents',
+        resourceType: 'raw',
+      );
+    } catch (e) {
+      return null;
     }
   }
 
@@ -943,131 +1235,14 @@ class BackendService {
     try {
       final user = _auth.currentUser;
       if (user == null) throw Exception('User not logged in');
-      await _firestore
-          .collection('users')
-          .doc(user.uid)
-          .set({
-        'location': {
-          'lat': lat,
-          'lng': lng,
-          'address': address.trim()
-        },
+      await _firestore.collection('users').doc(user.uid).set({
+        'location': {'lat': lat, 'lng': lng, 'address': address.trim()},
         'logoUrl': logoUrl,
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
       return BackendResult(success: true);
     } catch (e) {
       return BackendResult(success: false, message: e.toString());
-    }
-  }
-
-  // =========================================================
-  // FETCH CAVITE BUSINESS PINS
-  // =========================================================
-  static Future<List<BusinessPin>> fetchCaviteBusinessPins() async {
-    const double minLat = 14.10;
-    const double maxLat = 14.50;
-    const double minLng = 120.60;
-    const double maxLng = 121.10;
-    final snapshot = await _firestore
-        .collection('users')
-        .where('approved', isEqualTo: true)
-        .get();
-    final List<BusinessPin> pins = [];
-    for (final doc in snapshot.docs) {
-      final data = doc.data();
-      bool addedFromBusinesses = false;
-      final businesses = data['businesses'];
-      if (businesses != null && businesses is List) {
-        for (final b in businesses) {
-          if (b is! Map) continue;
-          final lat = (b['lat'] as num?)?.toDouble();
-          final lng = (b['lng'] as num?)?.toDouble();
-          if (lat == null || lng == null) continue;
-          if (lat < minLat ||
-              lat > maxLat ||
-              lng < minLng ||
-              lng > maxLng) continue;
-          final businessName =
-              (b['name'] as String?)?.isNotEmpty == true
-                  ? b['name'] as String
-                  : (data['businessName'] as String? ??
-                      data['name'] as String? ??
-                      'Unknown');
-          final logo =
-              (b['logoUrl'] as String?)?.isNotEmpty == true
-                  ? b['logoUrl'] as String
-                  : data['logoUrl'] as String?;
-          final addr =
-              (b['address'] as String?)?.isNotEmpty == true
-                  ? b['address'] as String
-                  : ((data['location'] as Map?)?['address']
-                          as String? ??
-                      data['address'] as String? ??
-                      '');
-          pins.add(BusinessPin(
-            uid: doc.id,
-            name: data['name'] as String? ?? '',
-            businessName: businessName,
-            userType: data['userType'] as String? ?? '',
-            email: data['email'] as String? ?? '',
-            phone: (b['phone'] as String?)?.isNotEmpty == true
-                ? b['phone'] as String
-                : (data['phone'] as String? ?? ''),
-            lat: lat,
-            lng: lng,
-            address: addr,
-            logoUrl: logo,
-            businessDesc: b['desc'] as String? ?? '',
-          ));
-          addedFromBusinesses = true;
-        }
-      }
-      if (!addedFromBusinesses) {
-        final loc = data['location'];
-        if (loc is Map) {
-          final lat = (loc['lat'] as num?)?.toDouble();
-          final lng = (loc['lng'] as num?)?.toDouble();
-          if (lat != null &&
-              lng != null &&
-              lat >= minLat &&
-              lat <= maxLat &&
-              lng >= minLng &&
-              lng <= maxLng) {
-            pins.add(BusinessPin(
-              uid: doc.id,
-              name: data['name'] as String? ?? '',
-              businessName: data['businessName'] as String? ??
-                  data['name'] as String? ??
-                  'Unknown',
-              userType: data['userType'] as String? ?? '',
-              email: data['email'] as String? ?? '',
-              phone: data['phone'] as String? ?? '',
-              lat: lat,
-              lng: lng,
-              address: loc['address'] as String? ??
-                  data['address'] as String? ??
-                  '',
-              logoUrl: data['logoUrl'] as String?,
-              businessDesc: '',
-            ));
-          }
-        }
-      }
-    }
-    return pins;
-  }
-
-  // =========================================================
-  // UPLOAD LOGO
-  // =========================================================
-  static Future<String?> uploadLogoImage(
-      Uint8List bytes, String fileName) async {
-    try {
-      return await _uploadToCloudinary(bytes, fileName,
-          folder: 'business_logos', resourceType: 'image');
-    } catch (e) {
-      return null;
     }
   }
 
@@ -1088,8 +1263,7 @@ class BackendService {
     request.fields['upload_preset'] = uploadPreset;
     request.fields['folder'] = folder;
     request.files.add(
-      http.MultipartFile.fromBytes('file', fileBytes,
-          filename: fileName),
+      http.MultipartFile.fromBytes('file', fileBytes, filename: fileName),
     );
     final response = await request.send();
     if (response.statusCode == 200) {
@@ -1169,8 +1343,7 @@ class BackendService {
             authorName: cd['authorName'],
             content: cd['content'],
             createdAt:
-                (cd['createdAt'] as Timestamp?)?.toDate() ??
-                    DateTime.now(),
+                (cd['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
           );
         }).toList();
         Post? originalPost;
@@ -1198,11 +1371,9 @@ class BackendService {
           content: d['content'] ?? '',
           imageUrl: d['imageUrl'],
           likesCount: d['likesCount'] ?? 0,
-          likedByMe:
-              (d['likedBy'] as List?)?.contains(uid) ?? false,
+          likedByMe: (d['likedBy'] as List?)?.contains(uid) ?? false,
           createdAt:
-              (d['createdAt'] as Timestamp?)?.toDate() ??
-                  DateTime.now(),
+              (d['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
           comments: comments,
           isRepost: d['isRepost'] == true,
           originalPost: originalPost,
@@ -1215,8 +1386,7 @@ class BackendService {
   // =========================================================
   // TOGGLE LIKE
   // =========================================================
-  static Future<void> toggleLike(
-      String postId, bool currentlyLiked) async {
+  static Future<void> toggleLike(String postId, bool currentlyLiked) async {
     final uid = _auth.currentUser?.uid;
     if (uid == null) return;
     final ref = _firestore.collection('posts').doc(postId);
@@ -1304,12 +1474,16 @@ class BackendService {
       final user = _auth.currentUser;
       if (user == null) throw Exception('Not logged in');
       final doc = await _firestore.collection('posts').doc(postId).get();
-      if (!doc.exists) return BackendResult(success: false, message: 'Post not found');
+      if (!doc.exists)
+        return BackendResult(success: false, message: 'Post not found');
       if (doc.data()?['uid'] != user.uid) {
         return BackendResult(success: false, message: 'Unauthorized');
       }
       final comments = await _firestore
-          .collection('posts').doc(postId).collection('comments').get();
+          .collection('posts')
+          .doc(postId)
+          .collection('comments')
+          .get();
       final batch = _firestore.batch();
       for (final c in comments.docs) batch.delete(c.reference);
       batch.delete(_firestore.collection('posts').doc(postId));
@@ -1331,9 +1505,11 @@ class BackendService {
       final user = _auth.currentUser;
       if (user == null) throw Exception('Not logged in');
       final validation = validatePostContent(newContent);
-      if (validation != null) return BackendResult(success: false, message: validation);
+      if (validation != null)
+        return BackendResult(success: false, message: validation);
       final doc = await _firestore.collection('posts').doc(postId).get();
-      if (!doc.exists) return BackendResult(success: false, message: 'Post not found');
+      if (!doc.exists)
+        return BackendResult(success: false, message: 'Post not found');
       if (doc.data()?['uid'] != user.uid) {
         return BackendResult(success: false, message: 'Unauthorized');
       }
@@ -1358,15 +1534,22 @@ class BackendService {
       final user = _auth.currentUser;
       if (user == null) throw Exception('Not logged in');
       final doc = await _firestore
-          .collection('posts').doc(postId)
-          .collection('comments').doc(commentId).get();
-      if (!doc.exists) return BackendResult(success: false, message: 'Comment not found');
+          .collection('posts')
+          .doc(postId)
+          .collection('comments')
+          .doc(commentId)
+          .get();
+      if (!doc.exists)
+        return BackendResult(success: false, message: 'Comment not found');
       if (doc.data()?['uid'] != user.uid) {
         return BackendResult(success: false, message: 'Unauthorized');
       }
       await _firestore
-          .collection('posts').doc(postId)
-          .collection('comments').doc(commentId).delete();
+          .collection('posts')
+          .doc(postId)
+          .collection('comments')
+          .doc(commentId)
+          .delete();
       return BackendResult(success: true);
     } catch (e) {
       return BackendResult(success: false, message: e.toString());
@@ -1390,15 +1573,22 @@ class BackendService {
             message: 'Comment contains inappropriate language.');
       }
       final doc = await _firestore
-          .collection('posts').doc(postId)
-          .collection('comments').doc(commentId).get();
-      if (!doc.exists) return BackendResult(success: false, message: 'Comment not found');
+          .collection('posts')
+          .doc(postId)
+          .collection('comments')
+          .doc(commentId)
+          .get();
+      if (!doc.exists)
+        return BackendResult(success: false, message: 'Comment not found');
       if (doc.data()?['uid'] != user.uid) {
         return BackendResult(success: false, message: 'Unauthorized');
       }
       await _firestore
-          .collection('posts').doc(postId)
-          .collection('comments').doc(commentId).update({
+          .collection('posts')
+          .doc(postId)
+          .collection('comments')
+          .doc(commentId)
+          .update({
         'content': newContent.trim(),
         'editedAt': FieldValue.serverTimestamp(),
       });
@@ -1434,8 +1624,7 @@ class BackendService {
     final uid = _auth.currentUser?.uid;
     if (uid == null) return false;
     try {
-      final doc =
-          await _firestore.collection('follows').doc(uid).get();
+      final doc = await _firestore.collection('follows').doc(uid).get();
       final following =
           List<String>.from(doc.data()?['following'] ?? []);
       return following.contains(targetUid);
@@ -1463,11 +1652,9 @@ class BackendService {
   static Future<List<Map<String, dynamic>>> fetchPostLikers(
       String postId) async {
     try {
-      final doc =
-          await _firestore.collection('posts').doc(postId).get();
+      final doc = await _firestore.collection('posts').doc(postId).get();
       if (!doc.exists) return [];
-      final likedBy =
-          List<String>.from(doc.data()?['likedBy'] ?? []);
+      final likedBy = List<String>.from(doc.data()?['likedBy'] ?? []);
       if (likedBy.isEmpty) return [];
       final List<Map<String, dynamic>> likers = [];
       for (final uid in likedBy) {
@@ -1511,8 +1698,7 @@ class BackendService {
         'originalAuthorLogoUrl': originalPost.authorLogoUrl,
         'originalContent': originalPost.content,
         'originalImageUrl': originalPost.imageUrl,
-        'originalCreatedAt':
-            Timestamp.fromDate(originalPost.createdAt),
+        'originalCreatedAt': Timestamp.fromDate(originalPost.createdAt),
         'createdAt': FieldValue.serverTimestamp(),
       });
       return BackendResult(success: true);
@@ -1522,9 +1708,7 @@ class BackendService {
   }
 
   // =========================================================
-  // ── NEW FEATURE 1: ATTENDED EVENTS STREAM
-  // Returns all events the current user has RSVPed to,
-  // ordered most-recent first.
+  // ATTENDED EVENTS STREAM
   // =========================================================
   static Stream<List<AttendedEvent>> attendedEventsStream() {
     final uid = _auth.currentUser?.uid;
@@ -1554,12 +1738,11 @@ class BackendService {
   }
 
   // =========================================================
-  // ── NEW FEATURE 2: SUBMIT POST-EVENT FEEDBACK
-  // Called after an event has passed; stores rating + notes.
+  // SUBMIT POST-EVENT FEEDBACK
   // =========================================================
   static Future<BackendResult> submitAttendanceFeedback({
     required String attendanceId,
-    required int rating,        // 1–5
+    required int rating,
     required String feedback,
   }) async {
     try {
@@ -1595,9 +1778,7 @@ class BackendService {
   }
 
   // =========================================================
-  // ── NEW FEATURE 3: MY SCHEDULE STREAM
-  // Returns upcoming RSVPed events for the personal schedule
-  // calendar — only future (or today) events, ordered by date.
+  // MY SCHEDULE STREAM
   // =========================================================
   static Stream<List<AttendedEvent>> myScheduleStream() {
     final uid = _auth.currentUser?.uid;
@@ -1636,27 +1817,20 @@ class BackendService {
   // ── MESSAGING ─────────────────────────────────────────────
   // =========================================================
 
-  /// Returns the current user's uid. Throws if not logged in.
   static String get currentUid {
     final uid = _auth.currentUser?.uid;
     if (uid == null) throw Exception('Not logged in');
     return uid;
   }
 
-  /// Checks whether two users are mutually following each other.
   static Future<bool> areMutual(String uid1, String uid2) async {
-    final doc1 =
-        await _firestore.collection('follows').doc(uid1).get();
-    final doc2 =
-        await _firestore.collection('follows').doc(uid2).get();
-    final f1 =
-        List<String>.from(doc1.data()?['following'] ?? []);
-    final f2 =
-        List<String>.from(doc2.data()?['following'] ?? []);
+    final doc1 = await _firestore.collection('follows').doc(uid1).get();
+    final doc2 = await _firestore.collection('follows').doc(uid2).get();
+    final f1 = List<String>.from(doc1.data()?['following'] ?? []);
+    final f2 = List<String>.from(doc2.data()?['following'] ?? []);
     return f1.contains(uid2) && f2.contains(uid1);
   }
 
-  /// Stream of all conversations for the current user.
   static Stream<List<Conversation>> conversationsStream() {
     final uid = _auth.currentUser?.uid;
     if (uid == null) return Stream.value([]);
@@ -1671,11 +1845,11 @@ class BackendService {
           id: doc.id,
           participants: List<String>.from(d['participants'] ?? []),
           participantNames: Map<String, String>.from(
-              (d['participantNames'] as Map? ?? {}).map(
-                  (k, v) => MapEntry(k.toString(), v.toString()))),
+              (d['participantNames'] as Map? ?? {})
+                  .map((k, v) => MapEntry(k.toString(), v.toString()))),
           participantLogos: Map<String, String?>.from(
-              (d['participantLogos'] as Map? ?? {}).map(
-                  (k, v) => MapEntry(k.toString(), v as String?))),
+              (d['participantLogos'] as Map? ?? {})
+                  .map((k, v) => MapEntry(k.toString(), v as String?))),
           isMutual: d['isMutual'] == true,
           lastMessage: d['lastMessage'] as String? ?? '',
           lastMessageTime: (d['lastMessageTime'] as Timestamp?)?.toDate(),
@@ -1695,7 +1869,6 @@ class BackendService {
     });
   }
 
-  /// Stream of messages inside a conversation.
   static Stream<List<ChatMessage>> messagesStream(String convId) {
     return _firestore
         .collection('conversations')
@@ -1731,23 +1904,18 @@ class BackendService {
             }).toList());
   }
 
-  /// Find or create a conversation between the current user and [otherId].
-  static Future<String> findOrCreateConversation(
-      String otherId) async {
+  static Future<String> findOrCreateConversation(String otherId) async {
     final myUid = currentUid;
     final snap = await _firestore
         .collection('conversations')
         .where('participants', arrayContains: myUid)
         .get();
     for (final doc in snap.docs) {
-      final parts =
-          List<String>.from(doc.data()['participants'] ?? []);
+      final parts = List<String>.from(doc.data()['participants'] ?? []);
       if (parts.contains(otherId)) return doc.id;
     }
-    final myDoc =
-        await _firestore.collection('users').doc(myUid).get();
-    final otherDoc =
-        await _firestore.collection('users').doc(otherId).get();
+    final myDoc = await _firestore.collection('users').doc(myUid).get();
+    final otherDoc = await _firestore.collection('users').doc(otherId).get();
     final myName = myDoc.data()?['name'] as String? ?? 'Me';
     final otherName = otherDoc.data()?['name'] as String? ?? 'User';
     final myLogo = myDoc.data()?['logoUrl'] as String?;
@@ -1768,43 +1936,48 @@ class BackendService {
     return ref.id;
   }
 
-  /// Send a text message.
-  static Future<void> sendTextMessage(
-      String convId, String text) async {
+  static Future<void> sendTextMessage(String convId, String text) async {
     await _sendMessage(convId: convId, text: text, type: 'text');
   }
 
-  /// Send an image message.
   static Future<void> sendImageMessage(
       String convId, Uint8List bytes, String fileName) async {
     final uploadName =
         'chat_${DateTime.now().millisecondsSinceEpoch}_$fileName';
     final url = await _uploadToCloudinary(
-      bytes, uploadName,
-      folder: 'chat_images', resourceType: 'image',
+      bytes,
+      uploadName,
+      folder: 'chat_images',
+      resourceType: 'image',
     );
     await _sendMessage(
-      convId: convId, text: '', type: 'image',
-      attachmentUrl: url, attachmentName: fileName,
+      convId: convId,
+      text: '',
+      type: 'image',
+      attachmentUrl: url,
+      attachmentName: fileName,
     );
   }
 
-  /// Send a file message.
   static Future<void> sendFileMessage(
       String convId, Uint8List bytes, String fileName) async {
     final uploadName =
         'chat_${DateTime.now().millisecondsSinceEpoch}_$fileName';
     final url = await _uploadToCloudinary(
-      bytes, uploadName,
-      folder: 'chat_files', resourceType: 'raw',
+      bytes,
+      uploadName,
+      folder: 'chat_files',
+      resourceType: 'raw',
     );
     await _sendMessage(
-      convId: convId, text: '', type: 'file',
-      attachmentUrl: url, attachmentName: fileName,
+      convId: convId,
+      text: '',
+      type: 'file',
+      attachmentUrl: url,
+      attachmentName: fileName,
     );
   }
 
-  /// Forward a message to another conversation.
   static Future<void> forwardMessage({
     required String targetConvId,
     required ChatMessage message,
@@ -1820,9 +1993,7 @@ class BackendService {
     );
   }
 
-  /// Soft-delete a message.
-  static Future<void> deleteMessage(
-      String convId, String msgId) async {
+  static Future<void> deleteMessage(String convId, String msgId) async {
     await _firestore
         .collection('conversations')
         .doc(convId)
@@ -1831,7 +2002,6 @@ class BackendService {
         .update({'deleted': true, 'text': 'This message was deleted'});
   }
 
-  /// Mark all messages in [convId] as read.
   static Future<void> markConversationRead(String convId) async {
     final uid = currentUid;
     await _firestore
@@ -1849,14 +2019,13 @@ class BackendService {
       if (data['senderId'] == uid) continue;
       final readBy = List<String>.from(data['readBy'] ?? []);
       if (!readBy.contains(uid)) {
-        batch.update(m.reference,
-            {'readBy': FieldValue.arrayUnion([uid])});
+        batch.update(
+            m.reference, {'readBy': FieldValue.arrayUnion([uid])});
       }
     }
     await batch.commit();
   }
 
-  /// Search approved users by name.
   static Future<List<Map<String, dynamic>>> searchUsers(
       String query) async {
     final uid = currentUid;
@@ -1869,9 +2038,7 @@ class BackendService {
     final filtered = snap.docs
         .where((d) => d.id != uid)
         .where((d) =>
-            (d.data()['name'] as String? ?? '')
-                .toLowerCase()
-                .contains(q))
+            (d.data()['name'] as String? ?? '').toLowerCase().contains(q))
         .map((d) => {...d.data(), 'uid': d.id})
         .toList();
     final myFollowDoc =
@@ -1879,19 +2046,16 @@ class BackendService {
     final myFollowing =
         List<String>.from(myFollowDoc.data()?['following'] ?? []);
     for (final u in filtered) {
-      final theirDoc = await _firestore
-          .collection('follows')
-          .doc(u['uid'])
-          .get();
+      final theirDoc =
+          await _firestore.collection('follows').doc(u['uid']).get();
       final theirFollowing =
           List<String>.from(theirDoc.data()?['following'] ?? []);
-      u['isMutual'] = myFollowing.contains(u['uid']) &&
-          theirFollowing.contains(uid);
+      u['isMutual'] =
+          myFollowing.contains(u['uid']) && theirFollowing.contains(uid);
     }
     return filtered;
   }
 
-  /// Fetch all conversations the current user participates in.
   static Future<List<Conversation>> fetchAllConversations() async {
     final uid = currentUid;
     final snap = await _firestore
@@ -1904,22 +2068,19 @@ class BackendService {
         id: doc.id,
         participants: List<String>.from(d['participants'] ?? []),
         participantNames: Map<String, String>.from(
-            (d['participantNames'] as Map? ?? {}).map(
-                (k, v) => MapEntry(k.toString(), v.toString()))),
+            (d['participantNames'] as Map? ?? {})
+                .map((k, v) => MapEntry(k.toString(), v.toString()))),
         participantLogos: Map<String, String?>.from(
-            (d['participantLogos'] as Map? ?? {}).map(
-                (k, v) => MapEntry(k.toString(), v as String?))),
+            (d['participantLogos'] as Map? ?? {})
+                .map((k, v) => MapEntry(k.toString(), v as String?))),
         isMutual: d['isMutual'] == true,
         lastMessage: d['lastMessage'] as String? ?? '',
-        lastMessageTime:
-            (d['lastMessageTime'] as Timestamp?)?.toDate(),
+        lastMessageTime: (d['lastMessageTime'] as Timestamp?)?.toDate(),
         lastSenderId: d['lastSenderId'] as String? ?? '',
         unreadCount: (d['unreadCount_$uid'] as int?) ?? 0,
       );
     }).toList();
   }
-
-  // ========= Private helpers ==========================================================
 
   static String _typeString(ChatMessageType t) {
     switch (t) {
@@ -1941,14 +2102,12 @@ class BackendService {
     String? forwardedFrom,
   }) async {
     final uid = currentUid;
-    final convDoc = await _firestore
-        .collection('conversations')
-        .doc(convId)
-        .get();
+    final convDoc =
+        await _firestore.collection('conversations').doc(convId).get();
     final participants =
         List<String>.from(convDoc.data()?['participants'] ?? []);
-    final otherId = participants.firstWhere(
-        (id) => id != uid, orElse: () => '');
+    final otherId =
+        participants.firstWhere((id) => id != uid, orElse: () => '');
     await _firestore
         .collection('conversations')
         .doc(convId)
@@ -1969,15 +2128,11 @@ class BackendService {
         : type == 'image'
             ? '📷 Image'
             : '📎 $attachmentName';
-    await _firestore
-        .collection('conversations')
-        .doc(convId)
-        .update({
+    await _firestore.collection('conversations').doc(convId).update({
       'lastMessage': preview,
       'lastMessageTime': FieldValue.serverTimestamp(),
       'lastSenderId': uid,
-      if (otherId.isNotEmpty)
-        'unreadCount_$otherId': FieldValue.increment(1),
+      if (otherId.isNotEmpty) 'unreadCount_$otherId': FieldValue.increment(1),
     });
   }
 }
