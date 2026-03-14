@@ -422,7 +422,8 @@ class BackendService {
   }
 
   // =========================================================
-  // REGISTER GOOGLE USER FOR APPROVAL
+  // REGISTER GOOGLE USER FOR APPROVAL  (updated)
+  // Added: businessAddress, businessLat, businessLng params
   // =========================================================
   static Future<BackendResult> registerGoogleUserForApproval({
     required User googleUser,
@@ -432,9 +433,12 @@ class BackendService {
     required String userType,
     String? businessName,
     String? businessNature,
-    String? professionalTitle,
     Uint8List? orFileBytes,
     String? orFileName,
+    // ── NEW: business location ──
+    String? businessAddress,
+    double? businessLat,
+    double? businessLng,
   }) async {
     try {
       try {
@@ -446,6 +450,7 @@ class BackendService {
       } catch (e) {
         // Proceed even if linking fails
       }
+
       String? orUrl;
       if (orFileBytes != null && orFileName != null) {
         try {
@@ -457,6 +462,7 @@ class BackendService {
               message: "Failed to upload OR document: ${e.toString()}");
         }
       }
+
       await _firestore.collection('users').doc(googleUser.uid).set({
         'name': name.trim(),
         'email': googleUser.email,
@@ -469,7 +475,13 @@ class BackendService {
         'approved': false,
         'authProvider': 'google',
         'createdAt': FieldValue.serverTimestamp(),
+        // ── NEW ──
+        if (businessAddress != null && businessAddress.isNotEmpty)
+          'businessAddress': businessAddress,
+        if (businessLat != null) 'businessLat': businessLat,
+        if (businessLng != null) 'businessLng': businessLng,
       });
+
       return BackendResult(success: true);
     } catch (e) {
       return BackendResult(
@@ -933,6 +945,82 @@ class BackendService {
       return BackendResult(success: true);
     } catch (e) {
       return BackendResult(success: false, message: e.toString());
+    }
+  }
+
+  // =========================================================
+  // UPLOAD PROFILE PICTURE
+  // Uploads to Cloudinary and saves the URL to the user's Firestore
+  // doc as 'logoUrl'. Also updates all existing conversations so
+  // the new avatar is reflected immediately in the chat list.
+  // =========================================================
+  static Future<BackendResult> uploadAndSaveProfilePicture(
+      Uint8List bytes, String fileName) async {
+    try {
+      final user = _auth.currentUser;
+      if (user == null) throw Exception('User not logged in');
+
+      final url = await _uploadToCloudinary(
+        bytes,
+        fileName,
+        folder: 'profile_pictures',
+        resourceType: 'image',
+      );
+
+      // Save to user doc
+      await _firestore.collection('users').doc(user.uid).set(
+        {'logoUrl': url, 'updatedAt': FieldValue.serverTimestamp()},
+        SetOptions(merge: true),
+      );
+
+      // Update all conversations this user is part of so the avatar
+      // refreshes for the other participants immediately.
+      final convsSnap = await _firestore
+          .collection('conversations')
+          .where('participants', arrayContains: user.uid)
+          .get();
+
+      if (convsSnap.docs.isNotEmpty) {
+        final batch = _firestore.batch();
+        for (final doc in convsSnap.docs) {
+          batch.update(doc.reference, {
+            'participantLogos.${user.uid}': url,
+          });
+        }
+        await batch.commit();
+      }
+
+      return BackendResult(success: true, message: url);
+    } catch (e) {
+      return BackendResult(success: false, message: e.toString());
+    }
+  }
+
+  // =========================================================
+  // FETCH NEWEST MEMBERS
+  // Returns the [limit] most recently created, approved users
+  // (excluding the current user). Used in the "New on CBOC" section.
+  // =========================================================
+  static Future<List<Map<String, dynamic>>> fetchNewestMembers(
+      {int limit = 3}) async {
+    final uid = _auth.currentUser?.uid;
+    try {
+      final snap = await _firestore
+          .collection('users')
+          .where('approved', isEqualTo: true)
+          .orderBy('createdAt', descending: true)
+          .limit(limit + 1) // fetch one extra so we can exclude self
+          .get();
+
+      final results = snap.docs
+          .where((d) => d.id != uid)
+          .take(limit)
+          .map((d) => {...d.data(), 'uid': d.id})
+          .toList();
+
+      return results;
+    } catch (e) {
+      return [];
     }
   }
 
@@ -1600,21 +1688,56 @@ class BackendService {
 
   // =========================================================
   // FOLLOW / UNFOLLOW
+  // After any follow/unfollow action, recalculates mutual status
+  // and updates every shared conversation document so the
+  // isMutual badge refreshes in real-time for both users.
   // =========================================================
   static Future<void> followUser(String targetUid) async {
     final uid = _auth.currentUser?.uid;
     if (uid == null) return;
+
+    // 1. Write to follows collection
     await _firestore.collection('follows').doc(uid).set({
       'following': FieldValue.arrayUnion([targetUid]),
     }, SetOptions(merge: true));
+
+    // 2. Recalculate mutual status and patch shared conversations
+    await _updateMutualStatusForPair(uid, targetUid);
   }
 
   static Future<void> unfollowUser(String targetUid) async {
     final uid = _auth.currentUser?.uid;
     if (uid == null) return;
+
+    // 1. Remove from follows collection
     await _firestore.collection('follows').doc(uid).set({
       'following': FieldValue.arrayRemove([targetUid]),
     }, SetOptions(merge: true));
+
+    // 2. Recalculate mutual status and patch shared conversations
+    await _updateMutualStatusForPair(uid, targetUid);
+  }
+
+  /// Checks whether uid1 and uid2 follow each other and updates
+  /// isMutual on every conversation that contains both of them.
+  static Future<void> _updateMutualStatusForPair(
+      String uid1, String uid2) async {
+    final mutual = await areMutual(uid1, uid2);
+
+    // Find all conversations that contain uid1
+    final snap = await _firestore
+        .collection('conversations')
+        .where('participants', arrayContains: uid1)
+        .get();
+
+    final batch = _firestore.batch();
+    for (final doc in snap.docs) {
+      final parts = List<String>.from(doc.data()['participants'] ?? []);
+      if (parts.contains(uid2)) {
+        batch.update(doc.reference, {'isMutual': mutual});
+      }
+    }
+    await batch.commit();
   }
 
   // =========================================================

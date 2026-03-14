@@ -67,7 +67,13 @@ class _UserProfilePageState extends State<UserProfilePage> {
   bool isEditing = false;
   bool _isLoading = false;
   bool _isSaving = false;
-  Uint8List? profileImage;
+
+  // Profile picture state
+  // _profileImageBytes  → bytes shown immediately after picking (before upload)
+  // _profileImageUrl    → the remote URL saved in Firestore (shown when not editing)
+  Uint8List? _profileImageBytes;
+  String? _profileImageUrl;
+  bool _isUploadingProfilePic = false;
 
   // Personal info controllers
   final nameController = TextEditingController();
@@ -122,6 +128,9 @@ class _UserProfilePageState extends State<UserProfilePage> {
         phoneController.text = data['phone'] ?? '';
         addressController.text = data['address'] ?? '';
         roleController.text = data['userType'] ?? '';
+        _profileImageUrl = data['logoUrl'] as String?;
+        // Clear any local preview so we display the fresh remote URL
+        _profileImageBytes = null;
       });
     }
     setState(() => _isLoading = false);
@@ -197,6 +206,56 @@ class _UserProfilePageState extends State<UserProfilePage> {
       duration: const Duration(seconds: 4),
     ));
     setState(() => isEditing = false);
+  }
+
+  // ================================================================
+  // PICK & UPLOAD PROFILE PICTURE
+  // Immediately shows a local preview, then uploads to Cloudinary,
+  // saves the URL to Firestore (and all conversation docs), and
+  // updates the displayed URL once done.
+  // ================================================================
+  Future<void> _pickAndUploadProfilePicture() async {
+    final XFile? file = await _picker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 512,
+      maxHeight: 512,
+      imageQuality: 85,
+    );
+    if (file == null) return;
+
+    final bytes = await file.readAsBytes();
+
+    // Show local preview right away
+    setState(() {
+      _profileImageBytes = bytes;
+      _isUploadingProfilePic = true;
+    });
+
+    final result = await BackendService.uploadAndSaveProfilePicture(
+      bytes,
+      file.name.isNotEmpty
+          ? file.name
+          : 'profile_${DateTime.now().millisecondsSinceEpoch}.jpg',
+    );
+
+    if (!mounted) return;
+
+    if (result.success) {
+      setState(() {
+        _profileImageUrl = result.message; // URL is returned in message field
+        _isUploadingProfilePic = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Profile picture updated!'),
+          backgroundColor: Colors.green,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } else {
+      setState(() => _isUploadingProfilePic = false);
+      _showError('Failed to upload profile picture: ${result.message}');
+    }
   }
 
   // ================================================================
@@ -462,17 +521,6 @@ class _UserProfilePageState extends State<UserProfilePage> {
         ),
       ),
     );
-  }
-
-  // ================================================================
-  // PROFILE IMAGE PICKER
-  // ================================================================
-  Future<void> _pickProfileImage() async {
-    final XFile? f = await _picker.pickImage(source: ImageSource.gallery);
-    if (f != null) {
-      final bytes = await f.readAsBytes();
-      setState(() => profileImage = bytes);
-    }
   }
 
   Future<void> _addBusinessImage(BusinessForm form) async {
@@ -1225,6 +1273,64 @@ class _UserProfilePageState extends State<UserProfilePage> {
   String _formatDate(DateTime dt) => '${dt.day}/${dt.month}/${dt.year}';
 
   // ================================================================
+  // BUILD THE PROFILE AVATAR
+  // Priority: local bytes preview > remote URL > fallback asset
+  // Shows a loading ring while the upload is in progress.
+  // ================================================================
+  Widget _buildProfileAvatar() {
+    ImageProvider image;
+    if (_profileImageBytes != null) {
+      image = MemoryImage(_profileImageBytes!);
+    } else if (_profileImageUrl != null) {
+      image = NetworkImage(_profileImageUrl!);
+    } else {
+      image = const AssetImage('assets/profile.jpg');
+    }
+
+    return GestureDetector(
+      onTap: _pickAndUploadProfilePicture, // tappable at all times
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          CircleAvatar(
+            radius: 45,
+            backgroundImage: image,
+          ),
+          // Upload-in-progress overlay
+          if (_isUploadingProfilePic)
+            Container(
+              width: 90,
+              height: 90,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.black.withOpacity(0.4),
+              ),
+              child: const CircularProgressIndicator(
+                color: Colors.white,
+                strokeWidth: 3,
+              ),
+            ),
+          // Camera badge (always visible so user knows it's tappable)
+          if (!_isUploadingProfilePic)
+            Positioned(
+              bottom: 0,
+              right: 0,
+              child: Container(
+                padding: const EdgeInsets.all(6),
+                decoration: const BoxDecoration(
+                  color: cbocPrimary,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.camera_alt,
+                    size: 16, color: Colors.white),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  // ================================================================
   // BUILD
   // ================================================================
   @override
@@ -1258,34 +1364,20 @@ class _UserProfilePageState extends State<UserProfilePage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ── Profile picture ──
+            // ── Profile picture ──────────────────────────────────────────────
+            Center(child: _buildProfileAvatar()),
+            const SizedBox(height: 8),
+            // Tap-hint label
             Center(
-              child: GestureDetector(
-                onTap: isEditing ? _pickProfileImage : null,
-                child: Stack(
-                  alignment: Alignment.bottomRight,
-                  children: [
-                    CircleAvatar(
-                      radius: 45,
-                      backgroundImage: profileImage != null
-                          ? MemoryImage(profileImage!)
-                          : const AssetImage('assets/profile.jpg')
-                              as ImageProvider,
-                    ),
-                    if (isEditing)
-                      Container(
-                        padding: const EdgeInsets.all(6),
-                        decoration: const BoxDecoration(
-                            color: Colors.black54,
-                            shape: BoxShape.circle),
-                        child: const Icon(Icons.camera_alt,
-                            size: 18, color: Colors.white),
-                      ),
-                  ],
-                ),
+              child: Text(
+                'Tap photo to update',
+                style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.grey.shade500,
+                    fontStyle: FontStyle.italic),
               ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 20),
 
             // ── Personal info ──
             _labeledField(label: 'Name', controller: nameController),

@@ -134,6 +134,26 @@ class _HomeBody extends StatefulWidget {
 class _HomeBodyState extends State<_HomeBody> {
   bool _isHovering = false;
 
+  // Newest members — fetched once on init
+  List<Map<String, dynamic>> _newestMembers = [];
+  bool _loadingNewMembers = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadNewestMembers();
+  }
+
+  Future<void> _loadNewestMembers() async {
+    final members = await BackendService.fetchNewestMembers(limit: 3);
+    if (mounted) {
+      setState(() {
+        _newestMembers = members;
+        _loadingNewMembers = false;
+      });
+    }
+  }
+
   // ── static content sections ──────────────────────────────────────────────
 
   Widget _header(BuildContext context) {
@@ -193,7 +213,7 @@ class _HomeBodyState extends State<_HomeBody> {
                 const Icon(Icons.notifications_outlined, size: 28),
                 Positioned(
                   right: 0,
-                    top: 0,
+                  top: 0,
                   child: Container(
                     width: 8,
                     height: 8,
@@ -224,7 +244,7 @@ class _HomeBodyState extends State<_HomeBody> {
         child: const TextField(
           decoration: InputDecoration(
             border: InputBorder.none,
-            hintText: "Search contacts...",
+            hintText: "Search People...",
             hintStyle: TextStyle(fontSize: 14, color: Colors.grey),
             suffixIcon: Icon(Icons.search, color: Colors.red, size: 20),
           ),
@@ -409,25 +429,114 @@ class _HomeBodyState extends State<_HomeBody> {
     );
   }
 
-  Widget _mutuals() {
-    final mutuals = [
-      {'name': 'Dr. Olivia Wilson', 'title': 'Consultant - Physiotherapy', 'img': 'assets/profile.jpg'},
-      {'name': 'Jonathan Patterson', 'title': 'Consultant - Internal Medicine', 'img': 'assets/profile.jpg'},
-      {'name': 'Athala Odiver', 'title': 'Marketing Specialist', 'img': 'assets/profile.jpg'},
-    ];
-
+  // ================================================================
+  // NEW ON CBOC  — replaces the old "Mutuals" section.
+  // Shows the 3 most recently joined (approved) members.
+  // ================================================================
+  Widget _newOnCBOC() {
     return Container(
       color: Colors.white,
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text("Mutuals",
-              style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+          // Section header
+          Row(
+            children: [
+              const Text(
+                "New on CBOC",
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.red.shade50,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.red.shade200),
+                ),
+                child: const Text(
+                  'Newest Members',
+                  style: TextStyle(
+                      color: Colors.red,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600),
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: 10),
-          ...mutuals.map((m) => Container(
+
+          // Loading state
+          if (_loadingNewMembers)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 20),
+              child: Center(
+                  child: CircularProgressIndicator(
+                      color: Colors.red, strokeWidth: 2)),
+            )
+          else if (_newestMembers.isEmpty)
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade50,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.grey.shade200),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.people_outline, color: Colors.grey, size: 18),
+                  SizedBox(width: 8),
+                  Text('No new members yet.',
+                      style: TextStyle(color: Colors.grey, fontSize: 13)),
+                ],
+              ),
+            )
+          else
+            ...(_newestMembers.map((member) {
+              final name = member['name'] as String? ?? 'Member';
+              final role = member['userType'] as String? ?? 'CBOC Member';
+              final logoUrl = member['logoUrl'] as String?;
+              final uid = member['uid'] as String? ?? '';
+
+              // Compute how long ago they joined
+              final createdAt = member['createdAt'];
+              String joinedLabel = 'Recently joined';
+              if (createdAt != null) {
+                DateTime? dt;
+                if (createdAt is DateTime) {
+                  dt = createdAt;
+                } else {
+                  try {
+                    // Firestore Timestamp comes as a Map when fetched via generic map
+                    dt = (createdAt as dynamic).toDate() as DateTime?;
+                  } catch (_) {}
+                }
+                if (dt != null) {
+                  final diff = DateTime.now().difference(dt);
+                  if (diff.inDays == 0) {
+                    joinedLabel = 'Joined today';
+                  } else if (diff.inDays == 1) {
+                    joinedLabel = 'Joined yesterday';
+                  } else if (diff.inDays < 7) {
+                    joinedLabel = 'Joined ${diff.inDays}d ago';
+                  } else if (diff.inDays < 30) {
+                    final weeks = (diff.inDays / 7).floor();
+                    joinedLabel =
+                        'Joined ${weeks}w ago';
+                  } else {
+                    final months = (diff.inDays / 30).floor();
+                    joinedLabel =
+                        'Joined ${months}mo ago';
+                  }
+                }
+              }
+
+              return Container(
                 margin: const EdgeInsets.only(bottom: 10),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 decoration: BoxDecoration(
                   color: const Color(0xFFF9F9F9),
                   borderRadius: BorderRadius.circular(12),
@@ -435,25 +544,91 @@ class _HomeBodyState extends State<_HomeBody> {
                 ),
                 child: Row(
                   children: [
+                    // Avatar
                     CircleAvatar(
                       radius: 22,
-                      backgroundImage: AssetImage(m['img']!),
+                      backgroundColor: Colors.red.shade100,
+                      backgroundImage: logoUrl != null
+                          ? NetworkImage(logoUrl) as ImageProvider
+                          : null,
+                      child: logoUrl == null
+                          ? Text(
+                              name.isNotEmpty
+                                  ? name[0].toUpperCase()
+                                  : '?',
+                              style: const TextStyle(
+                                  color: Colors.red,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16),
+                            )
+                          : null,
                     ),
                     const SizedBox(width: 12),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(m['name']!,
+
+                    // Name + role + join date
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            name,
                             style: const TextStyle(
-                                fontWeight: FontWeight.bold, fontSize: 13)),
-                        Text(m['title']!,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13),
+                          ),
+                          Text(
+                            role,
                             style: const TextStyle(
-                                color: Colors.grey, fontSize: 11)),
-                      ],
+                                color: Colors.grey, fontSize: 11),
+                          ),
+                          const SizedBox(height: 2),
+                          Row(
+                            children: [
+                              const Icon(Icons.fiber_new_rounded,
+                                  size: 13, color: Colors.red),
+                              const SizedBox(width: 3),
+                              Text(
+                                joinedLabel,
+                                style: const TextStyle(
+                                    color: Colors.red,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w600),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // Welcome badge
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: Colors.red.shade50,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: Colors.red.shade200),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.waving_hand_rounded,
+                              size: 13, color: Colors.red),
+                          SizedBox(width: 4),
+                          Text(
+                            'Welcome!',
+                            style: TextStyle(
+                                color: Colors.red,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600),
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
-              )),
+              );
+            }).toList()),
         ],
       ),
     );
@@ -539,7 +714,8 @@ class _HomeBodyState extends State<_HomeBody> {
                   const SizedBox(height: 8),
                   _recentlyInteracted(context),
                   const SizedBox(height: 8),
-                  _mutuals(),
+                  // ── NEW ON CBOC (replaces old Mutuals) ──
+                  _newOnCBOC(),
                   const SizedBox(height: 8),
                 ],
               ),
@@ -1139,6 +1315,7 @@ class _FeedPostCardState extends State<_FeedPostCard> {
       ),
     );
   }
+
   Widget build(BuildContext context) {
     final post = widget.post;
     final comments = post.comments;
@@ -1550,7 +1727,6 @@ class _FeedPostCardState extends State<_FeedPostCard> {
 }
 
 // ── ORIGINAL POST EMBEDDED CARD (inside repost) ───────────────────────────────
-// Tappable — opens _OriginalPostSheet with full detail + Follow button
 
 class _OriginalPostCard extends StatelessWidget {
   final Post original;
@@ -1584,7 +1760,6 @@ class _OriginalPostCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Original author header
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
               child: Row(
@@ -1610,7 +1785,6 @@ class _OriginalPostCard extends StatelessWidget {
                       ],
                     ),
                   ),
-                  // Inline Follow hint
                   Container(
                     padding: const EdgeInsets.symmetric(
                         horizontal: 10, vertical: 4),
@@ -1636,7 +1810,6 @@ class _OriginalPostCard extends StatelessWidget {
                 ],
               ),
             ),
-            // Content
             if (original.content.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
@@ -1647,7 +1820,6 @@ class _OriginalPostCard extends StatelessWidget {
                   style: const TextStyle(fontSize: 13, height: 1.4),
                 ),
               ),
-            // Image
             if (original.imageUrl != null)
               Padding(
                 padding: const EdgeInsets.only(top: 8),
@@ -1674,7 +1846,6 @@ class _OriginalPostCard extends StatelessWidget {
 }
 
 // ── ORIGINAL POST FULL POPUP ──────────────────────────────────────────────────
-// Shows the original post in full, with a Follow button on the author
 
 class _OriginalPostSheet extends StatefulWidget {
   final Post originalPost;
@@ -1734,7 +1905,6 @@ class _OriginalPostSheetState extends State<_OriginalPostSheet> {
       expand: false,
       builder: (_, scrollCtrl) => Column(
         children: [
-          // Handle
           Container(
             width: 40,
             height: 4,
@@ -1743,7 +1913,6 @@ class _OriginalPostSheetState extends State<_OriginalPostSheet> {
                 color: Colors.grey.shade300,
                 borderRadius: BorderRadius.circular(4)),
           ),
-          // Header row
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
             child: Row(
@@ -1761,7 +1930,6 @@ class _OriginalPostSheetState extends State<_OriginalPostSheet> {
               controller: scrollCtrl,
               padding: const EdgeInsets.all(16),
               children: [
-                // Author + Follow
                 Row(
                   children: [
                     CircleAvatar(
@@ -1842,12 +2010,10 @@ class _OriginalPostSheetState extends State<_OriginalPostSheet> {
 
                 const SizedBox(height: 14),
 
-                // Content
                 if (post.content.isNotEmpty)
                   Text(post.content,
                       style: const TextStyle(fontSize: 15, height: 1.5)),
 
-                // Image
                 if (post.imageUrl != null) ...[
                   const SizedBox(height: 12),
                   ClipRRect(
@@ -1861,7 +2027,6 @@ class _OriginalPostSheetState extends State<_OriginalPostSheet> {
                 const Divider(),
                 const SizedBox(height: 8),
 
-                // Like / comment counts for original
                 Row(
                   children: [
                     Container(
@@ -1929,7 +2094,6 @@ class _LikesSheetState extends State<_LikesSheet> {
       expand: false,
       builder: (_, controller) => Column(
         children: [
-          // Handle
           Container(
             width: 40, height: 4,
             margin: const EdgeInsets.symmetric(vertical: 12),
@@ -1943,8 +2107,8 @@ class _LikesSheetState extends State<_LikesSheet> {
               children: [
                 const Icon(Icons.thumb_up, color: Colors.red, size: 18),
                 const SizedBox(width: 8),
-                Text('People who liked this',
-                    style: const TextStyle(
+                const Text('People who liked this',
+                    style: TextStyle(
                         fontSize: 16, fontWeight: FontWeight.bold)),
               ],
             ),
@@ -2043,7 +2207,6 @@ class _AllCommentsSheetState extends State<_AllCommentsSheet> {
       expand: false,
       builder: (_, scrollCtrl) => Column(
         children: [
-          // Handle
           Container(
             width: 40, height: 4,
             margin: const EdgeInsets.symmetric(vertical: 12),
@@ -2133,7 +2296,6 @@ class _AllCommentsSheetState extends State<_AllCommentsSheet> {
                   ),
           ),
           const Divider(height: 1),
-          // Comment input
           Padding(
             padding: EdgeInsets.only(
               bottom: MediaQuery.of(context).viewInsets.bottom + 12,
@@ -2231,7 +2393,6 @@ class _ShareSheetState extends State<_ShareSheet> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Handle
           Center(
             child: Container(
               width: 40, height: 4,
@@ -2261,7 +2422,6 @@ class _ShareSheetState extends State<_ShareSheet> {
           ),
           const SizedBox(height: 8),
 
-          // Optional caption
           TextField(
             controller: _captionCtrl,
             maxLines: 3,
@@ -2288,7 +2448,6 @@ class _ShareSheetState extends State<_ShareSheet> {
           ),
           const SizedBox(height: 10),
 
-          // Original post preview
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
@@ -2335,7 +2494,6 @@ class _ShareSheetState extends State<_ShareSheet> {
           ),
           const SizedBox(height: 16),
 
-          // Share button
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
