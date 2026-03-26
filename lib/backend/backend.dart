@@ -2258,4 +2258,93 @@ class BackendService {
       if (otherId.isNotEmpty) 'unreadCount_$otherId': FieldValue.increment(1),
     });
   }
+
+  // =========================================================
+  // FETCH QR CODE URL
+  // =========================================================
+  // Reads the Firebase Storage QR image URL stored in
+  // users/{uid}.qrCodeURL.
+  //
+  // This field is written automatically by qr_generator.js (web side)
+  // the first time the user's portfolio page (check_portfolio.php)
+  // is loaded after admin approval. The QR encodes the URL:
+  //   https://cavitebusinessownersclub.infinityfree.me/
+  //   smartdigital-admin-capstone/Admin/check_portfolio.php?uid=<uid>
+  //
+  // Returns null if:
+  //   • The user is not logged in
+  //   • The document does not exist
+  //   • qrCodeURL has not been generated yet — user needs to visit
+  //     their portfolio link at least once after being approved.
+  // =========================================================
+  static Future<String?> fetchQRCodeURL() async {
+    try {
+      final user = _auth.currentUser;
+      if (user == null) return null;
+
+      final docSnap =
+          await _firestore.collection('users').doc(user.uid).get();
+
+      if (!docSnap.exists) return null;
+
+      // qrCodeURL is set by qr_generator.js after Firebase Storage upload.
+      // It is a permanent Firebase Storage download URL.
+      return docSnap.data()?['qrCodeURL'] as String?;
+    } catch (e) {
+      debugPrint('[BackendService] fetchQRCodeURL error: $e');
+      return null;
+    }
+  }
+  
+
+  // =========================================================
+  // GENERATE AND SAVE QR CODE
+  // Mirrors qr_generator.js logic — calls qrserver.com API,
+  // uploads the PNG to Cloudinary, saves URL to Firestore.
+  // =========================================================
+  static Future<String?> generateAndSaveQR() async {
+    try {
+      final user = _auth.currentUser;
+      if (user == null) return null;
+
+      const portfolioBase =
+          'https://cavitebusinessownersclub.infinityfree.me'
+          '/smartdigital-admin-capstone/Admin/check_portfolio.php';
+      final portfolioURL = '$portfolioBase?uid=${user.uid}';
+
+      // 1. Fetch QR PNG from qrserver.com (same API as qr_generator.js)
+      final qrApiUrl = Uri.parse(
+        'https://api.qrserver.com/v1/create-qr-code/'
+        '?size=300x300'
+        '&data=${Uri.encodeComponent(portfolioURL)}'
+        '&format=png'
+        '&margin=10',
+      );
+      final response = await http.get(qrApiUrl);
+      if (response.statusCode != 200) {
+        throw Exception('QR API error: ${response.statusCode}');
+      }
+
+      // 2. Upload PNG bytes to Cloudinary
+      final fileName = 'qr_${user.uid}.png';
+      final downloadURL = await _uploadToCloudinary(
+        response.bodyBytes,
+        fileName,
+        folder: 'qr_codes',
+        resourceType: 'image',
+      );
+
+      // 3. Save URL to Firestore (same field qr_generator.js writes)
+      await _firestore.collection('users').doc(user.uid).update({
+        'qrCodeURL': downloadURL,
+        'qrCodeGeneratedAt': FieldValue.serverTimestamp(),
+      });
+
+      return downloadURL;
+    } catch (e) {
+      debugPrint('[BackendService] generateAndSaveQR error: $e');
+      return null;
+    }
+  }
+
 }

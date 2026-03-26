@@ -1,42 +1,74 @@
 import 'package:flutter/material.dart';
 
+// =========================================================
+// THEME NOTIFIER
+// Holds the current ThemeMode and notifies listeners on change.
+// Wrap your MaterialApp with a ListenableBuilder (or use a
+// state-management solution) and pass themeNotifier.value to
+// MaterialApp.themeMode.
+//
+// Usage in main.dart:
+//   ListenableBuilder(
+//     listenable: themeNotifier,
+//     builder: (context, _) => MaterialApp(
+//       theme: ThemeData.light(),
+//       darkTheme: ThemeData.dark(),
+//       themeMode: themeNotifier.value,
+//       ...
+//     ),
+//   );
+// =========================================================
+class ThemeNotifier extends ValueNotifier<ThemeMode> {
+  ThemeNotifier() : super(ThemeMode.system);
+}
+
+/// Global instance — import and reference wherever needed.
+final themeNotifier = ThemeNotifier();
+
+// =========================================================
+// SETTINGS PAGE
+// Top-level settings screen.
+// =========================================================
 class SettingsPage extends StatelessWidget {
   const SettingsPage({super.key});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFFAFAFA),
       appBar: AppBar(
         title: const Text("Settings"),
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black,
         elevation: 1,
       ),
       body: ListView(
         children: [
+          // ── Account ─────────────────────────────────────────────────
           _buildSection(
             context,
-            title: "Account Preference",
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const AccountPreferencePage()),
-              );
-            },
+            title: "Account",
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const AccountPage()),
+            ),
           ),
-          _buildSection(context, title: "Notifications"),
+
+          // ── Privacy & Security ───────────────────────────────────────
           _buildSection(
             context,
-            title: "Terms and Privacy Policy",
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const TermsPrivacyPage(),
-                ),
-              );
-            },
+            title: "Privacy & Security",
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const PrivacySecurityPage()),
+            ),
+          ),
+
+          // ── Display (Dark Mode) ──────────────────────────────────────
+          _buildSection(
+            context,
+            title: "Display",
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const DisplayPage()),
+            ),
           ),
         ],
       ),
@@ -56,83 +88,290 @@ class SettingsPage extends StatelessWidget {
   }
 }
 
-class AccountPreferencePage extends StatelessWidget {
-  const AccountPreferencePage({super.key});
+// =========================================================
+// ACCOUNT PAGE
+// Contains: Change Password, Logout
+// =========================================================
+class AccountPage extends StatelessWidget {
+  const AccountPage({super.key});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text("Account Preference"),
-      ),
+      appBar: AppBar(title: const Text("Account")),
       body: ListView(
         children: [
-          _sectionHeader("Account Preference"),
-
-          _item(
-            context,
-            "Profile Information",
-            () => Navigator.push(
+          // ── Change Password ─────────────────────────────────────────
+          ListTile(
+            leading: const Icon(Icons.lock_outline),
+            title: const Text("Change Password"),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.push(
               context,
-              MaterialPageRoute(
-                builder: (_) => const DigitalCardInfoPage(),
-              ),
+              MaterialPageRoute(builder: (_) => const ChangePasswordPage()),
             ),
           ),
 
-          _item(
-            context,
-            "Display",
-            () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const DisplayPage()),
-            ),
-          ),
+          const Divider(height: 1, indent: 16, endIndent: 16),
 
-          _item(
-            context,
-            "General Preferences",
-            () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const GeneralPreferencePage()),
+          // ── Logout ──────────────────────────────────────────────────
+          ListTile(
+            leading: const Icon(Icons.logout, color: Colors.red),
+            title: const Text(
+              "Logout",
+              style: TextStyle(color: Colors.red),
             ),
-          ),
-
-          _item(
-            context,
-            "Account Management",
-            () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const AccountManagementPage()),
-            ),
+            onTap: () => _showLogoutDialog(context),
           ),
         ],
       ),
     );
   }
 
-  Widget _sectionHeader(String text) {
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Text(
-        text,
-        style: const TextStyle(
-          fontWeight: FontWeight.bold,
-          color: Colors.grey,
-        ),
+  // ── Logout Confirmation Dialog ────────────────────────────────────────
+  void _showLogoutDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text("Logout"),
+        content: const Text("Are you sure you want to log out?"),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Cancel"),
+          ),
+          TextButton(
+            onPressed: () {
+              // TODO: Firebase sign out logic
+              Navigator.pop(context);
+            },
+            child: const Text(
+              "Logout",
+              style: TextStyle(color: Colors.red),
+            ),
+          ),
+        ],
       ),
-    );
-  }
-
-  Widget _item(BuildContext context, String title, VoidCallback onTap) {
-    return ListTile(
-      title: Text(title),
-      trailing: const Icon(Icons.chevron_right),
-      onTap: onTap,
     );
   }
 }
 
+// =========================================================
+// CHANGE PASSWORD PAGE
+// TODO: Wire up Firebase reauthentication + updatePassword
+// =========================================================
+class ChangePasswordPage extends StatefulWidget {
+  const ChangePasswordPage({super.key});
+
+  @override
+  State<ChangePasswordPage> createState() => _ChangePasswordPageState();
+}
+
+class _ChangePasswordPageState extends State<ChangePasswordPage> {
+  final _currentPasswordController = TextEditingController();
+  final _newPasswordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
+
+  bool _obscureCurrent = true;
+  bool _obscureNew = true;
+  bool _obscureConfirm = true;
+
+  @override
+  void dispose() {
+    _currentPasswordController.dispose();
+    _newPasswordController.dispose();
+    _confirmPasswordController.dispose();
+    super.dispose();
+  }
+
+  void _handleChangePassword() {
+    final current = _currentPasswordController.text.trim();
+    final newPass = _newPasswordController.text.trim();
+    final confirm = _confirmPasswordController.text.trim();
+
+    if (current.isEmpty || newPass.isEmpty || confirm.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please fill in all fields.")),
+      );
+      return;
+    }
+
+    if (newPass != confirm) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("New passwords do not match.")),
+      );
+      return;
+    }
+
+    if (newPass.length < 6) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text("Password must be at least 6 characters.")),
+      );
+      return;
+    }
+
+    // TODO: Firebase reauthenticate then call user.updatePassword(newPass)
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text("Change Password")),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // ── Current Password ────────────────────────────────────
+            TextField(
+              controller: _currentPasswordController,
+              obscureText: _obscureCurrent,
+              decoration: InputDecoration(
+                labelText: "Current Password",
+                border: const OutlineInputBorder(),
+                suffixIcon: IconButton(
+                  icon: Icon(_obscureCurrent
+                      ? Icons.visibility_off
+                      : Icons.visibility),
+                  onPressed: () =>
+                      setState(() => _obscureCurrent = !_obscureCurrent),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // ── New Password ────────────────────────────────────────
+            TextField(
+              controller: _newPasswordController,
+              obscureText: _obscureNew,
+              decoration: InputDecoration(
+                labelText: "New Password",
+                border: const OutlineInputBorder(),
+                suffixIcon: IconButton(
+                  icon: Icon(_obscureNew
+                      ? Icons.visibility_off
+                      : Icons.visibility),
+                  onPressed: () =>
+                      setState(() => _obscureNew = !_obscureNew),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // ── Confirm New Password ────────────────────────────────
+            TextField(
+              controller: _confirmPasswordController,
+              obscureText: _obscureConfirm,
+              decoration: InputDecoration(
+                labelText: "Confirm New Password",
+                border: const OutlineInputBorder(),
+                suffixIcon: IconButton(
+                  icon: Icon(_obscureConfirm
+                      ? Icons.visibility_off
+                      : Icons.visibility),
+                  onPressed: () =>
+                      setState(() => _obscureConfirm = !_obscureConfirm),
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+
+            // ── Save Button ─────────────────────────────────────────
+            ElevatedButton(
+              onPressed: _handleChangePassword,
+              child: const Text("Save Changes"),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// =========================================================
+// PRIVACY & SECURITY PAGE
+// Contains: Manage Data / Privacy, Terms & Conditions,
+//           Privacy Policy
+// =========================================================
+class PrivacySecurityPage extends StatelessWidget {
+  const PrivacySecurityPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text("Privacy & Security")),
+      body: ListView(
+        children: [
+          // ── Manage Data / Privacy ───────────────────────────────────
+          ListTile(
+            leading: const Icon(Icons.manage_accounts_outlined),
+            title: const Text("Manage Data / Privacy"),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const ManageDataPage()),
+            ),
+          ),
+
+          const Divider(height: 1, indent: 16, endIndent: 16),
+
+          // ── Terms & Conditions ──────────────────────────────────────
+          ListTile(
+            leading: const Icon(Icons.description_outlined),
+            title: const Text("Terms & Conditions"),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () {
+              // TODO: Navigate to Terms & Conditions detail page / webview
+            },
+          ),
+
+          // ── Privacy Policy ──────────────────────────────────────────
+          ListTile(
+            leading: const Icon(Icons.privacy_tip_outlined),
+            title: const Text("Privacy Policy"),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () {
+              // TODO: Navigate to Privacy Policy detail page / webview
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// =========================================================
+// MANAGE DATA / PRIVACY PAGE
+// Placeholder — add data management options here such as:
+// - Download your data
+// - Clear activity history
+// - Data sharing preferences
+// =========================================================
+class ManageDataPage extends StatelessWidget {
+  const ManageDataPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text("Manage Data / Privacy")),
+      body: const Padding(
+        padding: EdgeInsets.all(16),
+        child: Text(
+          "Your privacy settings and data management options will appear here.",
+          style: TextStyle(color: Colors.grey),
+        ),
+      ),
+    );
+  }
+}
+
+// =========================================================
+// DISPLAY PAGE
+// Lets the user switch between Device / Light / Dark mode.
+// Updates the global [themeNotifier] which drives ThemeMode
+// in MaterialApp — no restart required.
+// =========================================================
 class DisplayPage extends StatefulWidget {
   const DisplayPage({super.key});
 
@@ -141,7 +380,44 @@ class DisplayPage extends StatefulWidget {
 }
 
 class _DisplayPageState extends State<DisplayPage> {
-  String selectedMode = "device";
+  // Mirror the current global theme mode locally so radio tiles
+  // reflect the live selection on first render.
+  late String _selectedMode;
+
+  @override
+  void initState() {
+    super.initState();
+    // Convert ThemeMode → local string key
+    switch (themeNotifier.value) {
+      case ThemeMode.light:
+        _selectedMode = "light";
+        break;
+      case ThemeMode.dark:
+        _selectedMode = "dark";
+        break;
+      case ThemeMode.system:
+      default:
+        _selectedMode = "device";
+    }
+  }
+
+  void _onModeChanged(String? value) {
+    if (value == null) return;
+    setState(() => _selectedMode = value);
+
+    // Apply the selected mode globally via the notifier
+    switch (value) {
+      case "light":
+        themeNotifier.value = ThemeMode.light;
+        break;
+      case "dark":
+        themeNotifier.value = ThemeMode.dark;
+        break;
+      case "device":
+      default:
+        themeNotifier.value = ThemeMode.system;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -161,285 +437,8 @@ class _DisplayPageState extends State<DisplayPage> {
     return RadioListTile<String>(
       title: Text(title),
       value: value,
-      groupValue: selectedMode,
-      onChanged: (val) {
-        setState(() {
-          selectedMode = val!;
-        });
-      },
-    );
-  }
-}
-
-class LanguagePage extends StatefulWidget {
-  const LanguagePage({super.key});
-
-  @override
-  State<LanguagePage> createState() => _LanguagePageState();
-}
-
-class _LanguagePageState extends State<LanguagePage> {
-  String selectedLanguage = "English";
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text("Language")),
-      body: Column(
-        children: [
-          RadioListTile(
-            title: const Text("English"),
-            value: "English",
-            groupValue: selectedLanguage,
-            onChanged: (value) {
-              setState(() => selectedLanguage = value!);
-            },
-          ),
-          RadioListTile(
-            title: const Text("Filipino"),
-            value: "Filipino",
-            groupValue: selectedLanguage,
-            onChanged: (value) {
-              setState(() => selectedLanguage = value!);
-            },
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class AccountManagementPage extends StatelessWidget {
-  const AccountManagementPage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text("Account Management")),
-      body: ListTile(
-        title: const Text(
-          "Delete Account",
-          style: TextStyle(color: Colors.red),
-        ),
-        onTap: () {
-          showDialog(
-            context: context,
-            builder: (_) => AlertDialog(
-              title: const Text("Delete Account"),
-              content: const Text(
-                "Are you sure you want to delete your account?",
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text("Cancel"),
-                ),
-                TextButton(
-                  onPressed: () {
-                    // TODO: Firebase delete logic
-                    Navigator.pop(context);
-                  },
-                  child: const Text(
-                    "Delete",
-                    style: TextStyle(color: Colors.red),
-                  ),
-                ),
-              ],
-            ),
-          );
-        },
-      ),
-    );
-  }
-}
-
-class TermsPrivacyPage extends StatelessWidget {
-  const TermsPrivacyPage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text("Terms and Privacy Policy"),
-      ),
-      body: ListView(
-        children: [
-          _item(context, "Help Center"),
-          _item(context, "Professional Community Policies"),
-          _item(context, "Recommendations Transparency"),
-          _item(context, "User Agreement"),
-          _item(context, "End User License Agreement"),
-        ],
-      ),
-    );
-  }
-
-  Widget _item(BuildContext context, String title) {
-    return ListTile(
-      title: Text(title),
-      trailing: const Icon(Icons.chevron_right),
-      onTap: () {
-        // TODO: Navigate to detail page / webview
-      },
-    );
-  }
-}
-
-class DigitalCardInfoPage extends StatelessWidget {
-  const DigitalCardInfoPage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text("Digital Card Information"),
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: const [
-            _InfoField(label: "Company Name"),
-            _InfoField(label: "Company Number"),
-            _InfoField(label: "Email"),
-            _InfoField(label: "Website"),
-            _InfoField(label: "Services"),
-            SizedBox(height: 20),
-            Text(
-              "Edit your card details from your profile.",
-              style: TextStyle(color: Colors.grey),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _InfoField extends StatelessWidget {
-  final String label;
-
-  const _InfoField({required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: TextField(
-        decoration: InputDecoration(
-          labelText: label,
-          border: const OutlineInputBorder(),
-        ),
-      ),
-    );
-  }
-}
-
-class GeneralPreferencePage extends StatelessWidget {
-  const GeneralPreferencePage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text("General Preferences"),
-      ),
-      body: ListView(
-        children: [
-          _item(
-            context,
-            "Language",
-            () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const LanguagePage()),
-            ),
-          ),
-          _item(
-            context,
-            "Show Profile Photos",
-            () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => const ShowProfilePhotosPage(),
-              ),
-            ),
-          ),
-          _item(
-            context,
-            "People you blocked",
-            () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => const BlockedPeoplePage(),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _item(BuildContext context, String title, VoidCallback onTap) {
-    return ListTile(
-      title: Text(title),
-      trailing: const Icon(Icons.chevron_right),
-      onTap: onTap,
-    );
-  }
-}
-
-class ShowProfilePhotosPage extends StatefulWidget {
-  const ShowProfilePhotosPage({super.key});
-
-  @override
-  State<ShowProfilePhotosPage> createState() => _ShowProfilePhotosPageState();
-}
-
-class _ShowProfilePhotosPageState extends State<ShowProfilePhotosPage> {
-  String selectedOption = "connections";
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text("Show Profile Photos")),
-      body: Column(
-        children: [
-          _radio("No one", "none"),
-          _radio("Your connections", "connections"),
-          _radio("All CBOC Members", "all"),
-        ],
-      ),
-    );
-  }
-
-  Widget _radio(String title, String value) {
-    return RadioListTile<String>(
-      title: Text(title),
-      value: value,
-      groupValue: selectedOption,
-      onChanged: (val) {
-        setState(() => selectedOption = val!);
-      },
-    );
-  }
-}
-
-class BlockedPeoplePage extends StatelessWidget {
-  const BlockedPeoplePage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text("Blocked People")),
-      body: ListView(
-        children: const [
-          ListTile(
-            leading: CircleAvatar(child: Icon(Icons.person)),
-            title: Text("Unknown"),
-            subtitle: Text("+639562145287"),
-          ),
-        ],
-      ),
+      groupValue: _selectedMode,
+      onChanged: _onModeChanged,
     );
   }
 }
