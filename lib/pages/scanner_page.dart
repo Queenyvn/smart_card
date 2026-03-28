@@ -21,7 +21,7 @@ class _ScannerPageState extends State<ScannerPage> {
       ),
       body: MobileScanner(
         onDetect: (capture) {
-          if (isProcessing) return; // Avoid multiple triggers
+          if (isProcessing) return; 
           final List<Barcode> barcodes = capture.barcodes;
           for (final barcode in barcodes) {
             final String? code = barcode.rawValue;
@@ -43,7 +43,7 @@ class _ScannerPageState extends State<ScannerPage> {
                       onPressed: () {
                         Navigator.of(context).pop();
                         setState(() {
-                          isProcessing = false; // Ready for next scan
+                          isProcessing = false; 
                         });
                       },
                       child: const Text("OK"),
