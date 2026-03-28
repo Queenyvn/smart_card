@@ -30,6 +30,26 @@ class _CalendarPageState extends State<CalendarPage>
   TimeOfDay? _startTime;
   TimeOfDay? _endTime;
 
+  /// Today's date with time zeroed out.
+  DateTime get _today => DateTime(
+      DateTime.now().year, DateTime.now().month, DateTime.now().day);
+
+  /// Last allowed date: Dec 31 of the current year.
+  DateTime get _lastAllowedDate =>
+      DateTime(DateTime.now().year, 12, 31);
+
+  /// Returns an error string if [date] is out of range, null if OK.
+  String? _validateEventDate(DateTime date) {
+    final d = DateTime(date.year, date.month, date.day);
+    if (!d.isAfter(_today.subtract(const Duration(days: 1)))) {
+      return 'You cannot schedule events on past dates.';
+    }
+    if (d.isAfter(_lastAllowedDate)) {
+      return 'Events can only be scheduled within ${DateTime.now().year}.';
+    }
+    return null;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -127,9 +147,9 @@ class _CalendarPageState extends State<CalendarPage>
                   onTap: () async {
                     final picked = await showDatePicker(
                       context: ctx,
-                      firstDate: DateTime.now(),
-                      lastDate: DateTime(2030),
-                      initialDate: _eventDate ?? DateTime.now(),
+                      firstDate: _today,           // blocks past dates
+                      lastDate: _lastAllowedDate,  // blocks beyond current year
+                      initialDate: _eventDate ?? _today,
                     );
                     if (picked != null) {
                       setDialogState(() => _eventDate = picked);
@@ -203,6 +223,18 @@ class _CalendarPageState extends State<CalendarPage>
                   );
                   return;
                 }
+
+                // ── Date range validation ──────────────────────────────
+                final dateError = _validateEventDate(_eventDate!);
+                if (dateError != null) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                        content: Text(dateError),
+                        backgroundColor: Colors.red),
+                  );
+                  return;
+                }
+
                 final slots = int.tryParse(slotsCtrl.text);
                 if (slots == null || slots <= 0) {
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -212,6 +244,29 @@ class _CalendarPageState extends State<CalendarPage>
                   );
                   return;
                 }
+
+                // ── Conflict check ─────────────────────────────────────
+                final conflicts = await BackendService.checkEventConflicts(
+                  date: _eventDate!,
+                  start: _startTime!,
+                  end: _endTime!,
+                );
+                if (conflicts.isNotEmpty) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          'Time conflict with: ${conflicts.join(', ')}. '
+                          'Please choose a different time.',
+                        ),
+                        backgroundColor: Colors.red.shade700,
+                        duration: const Duration(seconds: 4),
+                      ),
+                    );
+                  }
+                  return;
+                }
+
                 await BackendService.submitEventForApproval(
                   title: _titleCtrl.text,
                   venue: _venueCtrl.text,
@@ -227,7 +282,8 @@ class _CalendarPageState extends State<CalendarPage>
                 Navigator.pop(dialogCtx);
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
-                      content: Text('Event submitted for admin approval')),
+                      content: Text(
+                          'Event submitted — pending admin approval ⏳')),
                 );
               },
               child: const Text('Submit',
@@ -312,6 +368,7 @@ class _CalendarPageState extends State<CalendarPage>
           ],
         ),
       ),
+      // FAB just opens the dialog — all validation lives inside _openAddEventDialog()
       floatingActionButton: FloatingActionButton(
         backgroundColor: cbocAccent,
         onPressed: _openAddEventDialog,
@@ -1668,8 +1725,8 @@ class _MySubmissionsTab extends StatelessWidget {
                   onTap: () async {
                     final picked = await showDatePicker(
                       context: ctx,
-                      firstDate: DateTime.now(),
-                      lastDate: DateTime(2030),
+                      firstDate: DateTime.now(), // blocks past dates
+                      lastDate: DateTime(DateTime.now().year, 12, 31), // blocks beyond current year
                       initialDate: selectedDate,
                     );
                     if (picked != null)
@@ -2312,6 +2369,7 @@ class _EventDetailSheetState extends State<_EventDetailSheet> {
   bool _isAttending = false;
   bool _loading = true;
   bool _rsvpInProgress = false;
+  bool _plusOne = false; // tracks whether user wants to bring a guest
 
   @override
   void initState() {
@@ -2322,18 +2380,21 @@ class _EventDetailSheetState extends State<_EventDetailSheet> {
   Future<void> _checkAttendance() async {
     final attending =
         await BackendService.isAttendingEvent(widget.item.id);
-    if (mounted)
+    if (mounted) {
       setState(() {
         _isAttending = attending;
         _loading = false;
       });
+    }
   }
 
   Future<void> _handleAttend() async {
     if (_isAttending) return;
     setState(() => _rsvpInProgress = true);
-    final result =
-        await BackendService.attendEvent(upcomingEvent: widget.item);
+    final result = await BackendService.attendEvent(
+      upcomingEvent: widget.item,
+      plusOne: _plusOne ? 1 : 0, // pass plus-one count to backend
+    );
     if (mounted) {
       setState(() {
         _rsvpInProgress = false;
@@ -2342,6 +2403,7 @@ class _EventDetailSheetState extends State<_EventDetailSheet> {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(result.success
             ? 'You\'re attending "${widget.item.event.title}"!'
+                '${_plusOne ? ' (+1 guest)' : ''}'
             : result.message ?? 'Could not RSVP at this time.'),
       ));
     }
@@ -2450,7 +2512,107 @@ class _EventDetailSheetState extends State<_EventDetailSheet> {
                             height: 1.5,
                             color: Color(0xFF444444)),
                       ),
-                      const SizedBox(height: 30),
+                      const SizedBox(height: 20),
+
+                      // ── Approval notice ──────────────────────────────────────
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.amber.shade50,
+                          borderRadius: BorderRadius.circular(10),
+                          border:
+                              Border.all(color: Colors.amber.shade200),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.verified_user_outlined,
+                                size: 16, color: Colors.amber.shade700),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'All events are reviewed and approved by admin before appearing here.',
+                                style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.amber.shade800),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+
+                      // ── Plus-one toggle ──────────────────────────────────────
+                      if (!_isAttending && !_loading)
+                        GestureDetector(
+                          onTap: () =>
+                              setState(() => _plusOne = !_plusOne),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 14, vertical: 10),
+                            decoration: BoxDecoration(
+                              color: _plusOne
+                                  ? cbocAccent
+                                  : Colors.grey.shade100,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: _plusOne
+                                    ? cbocPrimary
+                                    : Colors.grey.shade300,
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  _plusOne
+                                      ? Icons.person_add_rounded
+                                      : Icons.person_add_alt_1_outlined,
+                                  size: 18,
+                                  color:
+                                      _plusOne ? cbocPrimary : Colors.grey,
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text('Bring a plus-one',
+                                          style: TextStyle(
+                                              fontWeight: FontWeight.w600,
+                                              fontSize: 13,
+                                              color: _plusOne
+                                                  ? cbocPrimary
+                                                  : Colors.black87)),
+                                      Text(
+                                        _plusOne
+                                            ? 'You + 1 guest (2 slots reserved)'
+                                            : 'Tap to add a guest',
+                                        style: TextStyle(
+                                            fontSize: 11,
+                                            color: _plusOne
+                                                ? cbocPrimary
+                                                    .withOpacity(0.7)
+                                                : Colors.grey),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Icon(
+                                  _plusOne
+                                      ? Icons.check_circle_rounded
+                                      : Icons.radio_button_unchecked,
+                                  color: _plusOne
+                                      ? cbocPrimary
+                                      : Colors.grey.shade400,
+                                  size: 20,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      const SizedBox(height: 12),
+
+                      // ── RSVP button ──────────────────────────────────────────
                       SizedBox(
                         width: double.infinity,
                         child: _loading
@@ -2473,10 +2635,15 @@ class _EventDetailSheetState extends State<_EventDetailSheet> {
                                         : const Icon(
                                             Icons.event_available_rounded,
                                             color: Colors.white),
-                                    label: const Text('Attend Event',
-                                        style: TextStyle(
-                                            color: Colors.white,
-                                            fontWeight: FontWeight.bold)),
+                                    label: Text(
+                                      // button label reflects plus-one state
+                                      _plusOne
+                                          ? 'Attend (+1 Guest)'
+                                          : 'Attend Event',
+                                      style: const TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold),
+                                    ),
                                     style: ElevatedButton.styleFrom(
                                       backgroundColor: cbocPrimary,
                                       minimumSize:
