@@ -2347,4 +2347,22 @@ class BackendService {
     }
   }
 
+  // =========================================================
+  // FETCH PORTFOLIO URL
+  // Returns the portfolio page URL for the current user.
+  // This is the same URL encoded in the QR code.
+  // =========================================================
+  static Future<String?> fetchPortfolioURL() async {
+    try {
+      final user = _auth.currentUser;
+      if (user == null) return null;
+      const portfolioBase =
+          'https://cavitebusinessownersclub.infinityfree.me'
+          '/smartdigital-admin-capstone/Admin/check_portfolio.php';
+      return '$portfolioBase?uid=${user.uid}';
+    } catch (e) {
+      return null;
+    }
+  }
+
 }

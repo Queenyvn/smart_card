@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../backend/backend.dart';
 
 class QRCodePage extends StatefulWidget {
@@ -10,7 +10,7 @@ class QRCodePage extends StatefulWidget {
 }
 
 class _QRCodePageState extends State<QRCodePage> {
-  late Future<String?> _qrFuture;
+  late Future<_QRData?> _qrFuture;
 
   @override
   void initState() {
@@ -18,16 +18,28 @@ class _QRCodePageState extends State<QRCodePage> {
     _qrFuture = _loadOrGenerateQR();
   }
 
-  /// Reads qrCodeURL from Firestore first.
-  /// If missing, auto-generates via qrserver.com and saves it — 
-  /// exactly what qr_generator.js does on web.
-  Future<String?> _loadOrGenerateQR() async {
-    // Step 1: Check Firestore for existing URL
+  Future<_QRData?> _loadOrGenerateQR() async {
     final existing = await BackendService.fetchQRCodeURL();
-    if (existing != null && existing.isNotEmpty) return existing;
+    final url = (existing != null && existing.isNotEmpty)
+        ? existing
+        : await BackendService.generateAndSaveQR();
+    if (url == null || url.isEmpty) return null;
 
-    // Step 2: Not found — generate, upload, save, return
-    return BackendService.generateAndSaveQR();
+    // Reconstruct the portfolio URL from the QR image URL stored in Firestore
+    // The portfolio link is stored separately in Firestore or we rebuild it:
+    final portfolioUrl = await BackendService.fetchPortfolioURL();
+    return _QRData(qrImageUrl: url, portfolioUrl: portfolioUrl ?? '');
+  }
+
+  Future<void> _openPortfolio(String url) async {
+    final uri = Uri.parse(url);
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not open the portfolio link.')),
+        );
+      }
+    }
   }
 
   @override
@@ -41,79 +53,39 @@ class _QRCodePageState extends State<QRCodePage> {
         elevation: 1,
       ),
       body: Center(
-        child: FutureBuilder<String?>(
+        child: FutureBuilder<_QRData?>(
           future: _qrFuture,
           builder: (context, snapshot) {
-            // ── Loading ──────────────────────────────────────────────
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   CircularProgressIndicator(),
                   SizedBox(height: 16),
-                  Text(
-                    'Generating your QR code...',
-                    style: TextStyle(color: Colors.black54),
-                  ),
+                  Text('Generating your QR code...',
+                      style: TextStyle(color: Colors.black54)),
                 ],
               );
             }
 
-            // ── Error ────────────────────────────────────────────────
             if (snapshot.hasError) {
-              return Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.error_outline,
-                      size: 48, color: Colors.redAccent),
-                  const SizedBox(height: 12),
-                  Text(
-                    'Failed to load QR code.\n${snapshot.error}',
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(color: Colors.black54),
-                  ),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: () =>
-                        setState(() => _qrFuture = _loadOrGenerateQR()),
-                    child: const Text('Retry'),
-                  ),
-                ],
+              return _ErrorView(
+                message: 'Failed to load QR code.\n${snapshot.error}',
+                onRetry: () =>
+                    setState(() => _qrFuture = _loadOrGenerateQR()),
               );
             }
 
-            final qrUrl = snapshot.data;
-
-            // ── Generation failed (null returned) ────────────────────
-            if (qrUrl == null || qrUrl.isEmpty) {
-              return Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.qr_code_2,
-                      size: 64, color: Colors.black26),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Could not generate QR code.',
-                    style: TextStyle(
-                        fontSize: 16, fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Please check your connection and try again.',
-                    style: TextStyle(fontSize: 14, color: Colors.black54),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: () =>
-                        setState(() => _qrFuture = _loadOrGenerateQR()),
-                    child: const Text('Try Again'),
-                  ),
-                ],
+            final data = snapshot.data;
+            if (data == null) {
+              return _ErrorView(
+                message:
+                    'Could not generate QR code.\nPlease check your connection and try again.',
+                onRetry: () =>
+                    setState(() => _qrFuture = _loadOrGenerateQR()),
               );
             }
 
-            // ── QR ready ─────────────────────────────────────────────
             return SingleChildScrollView(
               child: Center(
                 child: Container(
@@ -136,7 +108,7 @@ class _QRCodePageState extends State<QRCodePage> {
                       ClipRRect(
                         borderRadius: BorderRadius.circular(12),
                         child: Image.network(
-                          qrUrl,
+                          data.qrImageUrl,
                           width: 220,
                           height: 220,
                           fit: BoxFit.contain,
@@ -145,8 +117,8 @@ class _QRCodePageState extends State<QRCodePage> {
                             return const SizedBox(
                               width: 220,
                               height: 220,
-                              child: Center(
-                                  child: CircularProgressIndicator()),
+                              child:
+                                  Center(child: CircularProgressIndicator()),
                             );
                           },
                           errorBuilder: (context, error, stack) {
@@ -164,31 +136,28 @@ class _QRCodePageState extends State<QRCodePage> {
                       const SizedBox(height: 16),
                       const Text(
                         "Scan this QR code to view your profile",
-                        style: TextStyle(
-                            fontSize: 16, color: Colors.black54),
+                        style:
+                            TextStyle(fontSize: 16, color: Colors.black54),
                         textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: 20),
-                      OutlinedButton.icon(
-                        onPressed: () {
-                          Clipboard.setData(ClipboardData(text: qrUrl));
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('QR image link copied!'),
-                              duration: Duration(seconds: 2),
+                      // ── Opens portfolio URL without showing the raw link ──
+                      if (data.portfolioUrl.isNotEmpty)
+                        ElevatedButton.icon(
+                          onPressed: () =>
+                              _openPortfolio(data.portfolioUrl),
+                          icon: const Icon(Icons.open_in_browser, size: 18),
+                          label: const Text('View My Portfolio'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.black87,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 24, vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
                             ),
-                          );
-                        },
-                        icon: const Icon(Icons.copy, size: 18),
-                        label: const Text('Copy QR Link'),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.black87,
-                          side: const BorderSide(color: Colors.black26),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
                           ),
                         ),
-                      ),
                     ],
                   ),
                 ),
@@ -197,6 +166,36 @@ class _QRCodePageState extends State<QRCodePage> {
           },
         ),
       ),
+    );
+  }
+}
+
+// ── Simple data holder ────────────────────────────────────────────────────────
+class _QRData {
+  final String qrImageUrl;
+  final String portfolioUrl;
+  const _QRData({required this.qrImageUrl, required this.portfolioUrl});
+}
+
+// ── Reusable error widget ─────────────────────────────────────────────────────
+class _ErrorView extends StatelessWidget {
+  final String message;
+  final VoidCallback onRetry;
+  const _ErrorView({required this.message, required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Icon(Icons.error_outline, size: 48, color: Colors.redAccent),
+        const SizedBox(height: 12),
+        Text(message,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.black54)),
+        const SizedBox(height: 16),
+        ElevatedButton(onPressed: onRetry, child: const Text('Retry')),
+      ],
     );
   }
 }
