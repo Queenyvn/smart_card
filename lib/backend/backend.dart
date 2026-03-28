@@ -314,6 +314,7 @@ class AttendedEvent {
   final int? rating;
   final String? feedback;
   final bool feedbackSubmitted;
+  final int plusOne;
 
   AttendedEvent({
     required this.id,
@@ -325,6 +326,7 @@ class AttendedEvent {
     this.rating,
     this.feedback,
     required this.feedbackSubmitted,
+    this.plusOne = 0,
   });
 
   bool get isPast =>
@@ -842,6 +844,7 @@ class BackendService {
   // =========================================================
   static Future<BackendResult> attendEvent({
     required UpcomingEvent upcomingEvent,
+    int plusOne = 0,
   }) async {
     try {
       final uid = _auth.currentUser?.uid;
@@ -856,6 +859,15 @@ class BackendService {
         return BackendResult(
             success: false, message: 'Already attending this event');
       }
+      
+      // Clamp plus-one to 0 or 1, consume slots accordingly
+      final guests = plusOne.clamp(0, 1);
+      final slotsNeeded = 1 + guests;
+      if (upcomingEvent.availableSlots < slotsNeeded) {
+        return BackendResult(
+            success: false, message: 'Not enough available slots.');
+      }
+      
       await _firestore.collection('event_attendance').add({
         'uid': uid,
         'eventId': upcomingEvent.id,
@@ -863,16 +875,50 @@ class BackendService {
         'venue': upcomingEvent.event.venue,
         'date': Timestamp.fromDate(upcomingEvent.date),
         'status': 'attending',
+        'plusOne': guests,
         'feedbackSubmitted': false,
         'createdAt': Timestamp.now(),
       });
       await _firestore.collection('events').doc(upcomingEvent.id).update({
-        'availableSlots': FieldValue.increment(-1),
+        'availableSlots': FieldValue.increment(-slotsNeeded),
       });
       return BackendResult(success: true);
     } catch (e) {
       return BackendResult(success: false, message: e.toString());
     }
+  }
+
+  // =========================================================
+  // CHECK EVENT CONFLICTS
+  // Returns titles of approved events on the same date that
+  // overlap with the given time window.
+  // =========================================================
+  static Future<List<String>> checkEventConflicts({
+    required DateTime date,
+    required TimeOfDay start,
+    required TimeOfDay end,
+  }) async {
+    final normalizedDate = DateTime(date.year, date.month, date.day);
+    final snap = await _firestore
+        .collection('events')
+        .where('date', isEqualTo: Timestamp.fromDate(normalizedDate))
+        .where('approved', isEqualTo: true)
+        .get();
+
+    final startMins = start.hour * 60 + start.minute;
+    final endMins = end.hour * 60 + end.minute;
+    final conflicts = <String>[];
+
+    for (final doc in snap.docs) {
+      final d = doc.data();
+      final eStart = (d['startHour'] as int) * 60 + (d['startMinute'] as int);
+      final eEnd = (d['endHour'] as int) * 60 + (d['endMinute'] as int);
+      // Overlap: new event starts before existing ends AND ends after existing starts
+      if (startMins < eEnd && endMins > eStart) {
+        conflicts.add(d['title'] as String? ?? 'Unnamed event');
+      }
+    }
+    return conflicts;
   }
 
   // =========================================================
@@ -1853,6 +1899,7 @@ class BackendService {
           rating: d['rating'] as int?,
           feedback: d['feedback'] as String?,
           feedbackSubmitted: d['feedbackSubmitted'] == true,
+          plusOne: (d['plusOne'] as int?) ?? 0,
         );
       }).toList();
       list.sort((a, b) => b.date.compareTo(a.date));
@@ -1927,6 +1974,7 @@ class BackendService {
               rating: d['rating'] as int?,
               feedback: d['feedback'] as String?,
               feedbackSubmitted: d['feedbackSubmitted'] == true,
+              plusOne: (d['plusOne'] as int?) ?? 0,
             );
           })
           .where((e) => !e.date.isBefore(today))
