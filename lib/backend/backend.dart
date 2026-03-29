@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'dart:math';
 // NOTE: dart:io and firebase_storage are intentionally NOT imported.
 // All file uploads (logos, posts, chat images/files) use Cloudinary via
 // _uploadToCloudinary(), which accepts Uint8List and works on web + mobile.
@@ -424,8 +425,50 @@ class BackendService {
   }
 
   // =========================================================
+  // CHECK DUPLICATE NAME
+  // Returns true if a user with the same trimmed name (case-insensitive)
+  // already exists in the 'users' collection.
+  // Excludes [excludeUid] so a user editing their own profile isn't blocked.
+  // =========================================================
+  static Future<bool> isDuplicateName(String name,
+      {String? excludeUid}) async {
+    final trimmed = name.trim().toLowerCase();
+    final snap = await _firestore.collection('users').get();
+    for (final doc in snap.docs) {
+      if (excludeUid != null && doc.id == excludeUid) continue;
+      final existingName =
+          (doc.data()['name'] as String? ?? '').trim().toLowerCase();
+      if (existingName == trimmed) return true;
+    }
+    return false;
+  }
+
+  // =========================================================
+  // CHECK DUPLICATE PHONE
+  // Returns true if a user with the same trimmed phone number
+  // already exists in the 'users' collection.
+  // Excludes [excludeUid] so a user editing their own profile isn't blocked.
+  // =========================================================
+  static Future<bool> isDuplicatePhone(String phone,
+      {String? excludeUid}) async {
+    final trimmed = phone.trim();
+    if (trimmed.isEmpty) return false;
+    final snap = await _firestore
+        .collection('users')
+        .where('phone', isEqualTo: trimmed)
+        .limit(1)
+        .get();
+    for (final doc in snap.docs) {
+      if (excludeUid != null && doc.id == excludeUid) continue;
+      return true;
+    }
+    return false;
+  }
+
+  // =========================================================
   // REGISTER GOOGLE USER FOR APPROVAL  (updated)
   // Added: businessAddress, businessLat, businessLng params
+  // Now validates duplicate name and phone before writing.
   // =========================================================
   static Future<BackendResult> registerGoogleUserForApproval({
     required User googleUser,
@@ -433,6 +476,7 @@ class BackendService {
     required String password,
     required String address,
     required String userType,
+    String? phone,
     String? businessName,
     String? businessNature,
     Uint8List? orFileBytes,
@@ -443,6 +487,28 @@ class BackendService {
     double? businessLng,
   }) async {
     try {
+      // ── Duplicate name check ──
+      final nameTaken = await isDuplicateName(name);
+      if (nameTaken) {
+        return BackendResult(
+          success: false,
+          message:
+              'The name "$name" is already registered. Please use your full legal name or contact the admin.',
+        );
+      }
+
+      // ── Duplicate phone check (only when a phone is supplied) ──
+      if (phone != null && phone.trim().isNotEmpty) {
+        final phoneTaken = await isDuplicatePhone(phone.trim());
+        if (phoneTaken) {
+          return BackendResult(
+            success: false,
+            message:
+                'The phone number "${phone.trim()}" is already linked to another account.',
+          );
+        }
+      }
+
       try {
         final emailCred = EmailAuthProvider.credential(
           email: googleUser.email!,
@@ -470,6 +536,7 @@ class BackendService {
         'email': googleUser.email,
         'address': address.trim(),
         'userType': userType,
+        if (phone != null && phone.trim().isNotEmpty) 'phone': phone.trim(),
         'businessName': businessName?.trim(),
         'businessNature': businessNature?.trim(),
         'orDocumentUrl': orUrl,
@@ -488,6 +555,258 @@ class BackendService {
     } catch (e) {
       return BackendResult(
           success: false, message: "An error occurred: ${e.toString()}");
+    }
+  }
+
+  // =========================================================
+  // FORGOT PASSWORD — SEND VERIFICATION CODE
+  // Generates a 6-digit code, stores it in 'password_reset_codes'
+  // with a 15-minute expiry, then emails it to the user via EmailJS.
+  //
+  // EMAILJS SETUP (one-time):
+  //   1. Create a free account at https://emailjs.com
+  //   2. Add an Email Service (e.g. Gmail) → note the Service ID
+  //   3. Create an Email Template with variables:
+  //        {{to_email}}  — recipient address
+  //        {{code}}      — the 6-digit code
+  //        {{user_name}} — recipient's name (or "there" as fallback)
+  //      Example body: "Your CBOC verification code is: {{code}}
+  //                     It expires in 15 minutes."
+  //   4. Note your Template ID and Public Key (Account → API Keys)
+  //   5. Fill in the three _emailjs* constants below.
+  //
+  // HOW IT WORKS:
+  //   1. Verify the email exists and belongs to a registered user.
+  //   2. Generate a random 6-digit code.
+  //   3. Store code + expiry in 'password_reset_codes/{email}'.
+  //   4. POST to EmailJS REST API → user receives an email with the code.
+  //   5. Return success so the UI can show the code-entry screen.
+  //
+  // NOTE: The old _auth.sendPasswordResetEmail() call has been removed.
+  //       That Firebase built-in only sends a reset *link*, not our custom
+  //       6-digit code, which was causing user confusion. EmailJS now
+  //       handles all email delivery for this flow.
+  // =========================================================
+
+  // ── EmailJS credentials ───────────────────────────────────
+  static const _emailjsServiceId  = 'service_dfb1835';
+  static const _emailjsTemplateId = 'template_qe2gqvu';
+  static const _emailjsPublicKey  = 'Sm_5u-6PRZpRkGD-u';
+
+  static Future<BackendResult> sendPasswordResetCode(String email) async {
+    try {
+      final trimmedEmail = email.trim().toLowerCase();
+
+      // ── 1. Check that the email belongs to a registered user ──
+      final snap = await _firestore
+          .collection('users')
+          .where('email', isEqualTo: trimmedEmail)
+          .limit(1)
+          .get();
+
+      // Always return the same generic message to avoid email enumeration.
+      // We still skip sending if the email is unknown (nothing to send to).
+      if (snap.docs.isEmpty) {
+        return BackendResult(
+          success: true,
+          message:
+              'If that email is registered, a verification code has been sent.',
+        );
+      }
+
+      // Grab the user's name for a friendlier email greeting
+      final userName =
+          snap.docs.first.data()['name'] as String? ?? 'there';
+
+      // ── 2. Generate a 6-digit code ──
+      final code = (100000 + Random().nextInt(900000)).toString();
+      final expiry = DateTime.now().add(const Duration(minutes: 15));
+
+      // ── 3. Persist code to Firestore ──
+      await _firestore
+          .collection('password_reset_codes')
+          .doc(trimmedEmail)
+          .set({
+        'code': code,
+        'expiresAt': Timestamp.fromDate(expiry),
+        'used': false,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      // ── 4. Send the code via EmailJS REST API ──
+      // EmailJS is used here because Firebase Auth's built-in
+      // sendPasswordResetEmail() only delivers a reset *link*, not a
+      // custom numeric code. EmailJS lets us inject the code directly
+      // into a template and send it from the client without a backend.
+      final emailjsUrl =
+          Uri.parse('https://api.emailjs.com/api/v1.0/email/send');
+
+      final emailResponse = await http.post(
+        emailjsUrl,
+        headers: {
+          'Content-Type': 'application/json',
+          'origin': 'http://localhost', // required by EmailJS REST API
+        },
+        body: json.encode({
+          'service_id':  _emailjsServiceId,
+          'template_id': _emailjsTemplateId,
+          'user_id':     _emailjsPublicKey,
+          'template_params': {
+            'to_email':  trimmedEmail,
+            'user_name': userName,
+            'code':      code,
+          },
+        }),
+      );
+
+      if (emailResponse.statusCode != 200) {
+        // Log for debugging but don't expose internal details to the user
+        debugPrint(
+          '[BackendService] EmailJS error ${emailResponse.statusCode}: '
+          '${emailResponse.body}',
+        );
+        return BackendResult(
+          success: false,
+          message:
+              'Failed to send verification email. Please try again later.',
+        );
+      }
+
+      debugPrint(
+          '[BackendService] Password reset code for $trimmedEmail: $code');
+
+      return BackendResult(
+        success: true,
+        message:
+            'If that email is registered, a verification code has been sent.',
+      );
+    } catch (e) {
+      return BackendResult(success: false, message: e.toString());
+    }
+  }
+
+  // =========================================================
+  // FORGOT PASSWORD — VERIFY CODE
+  // Checks the submitted 6-digit code against the stored value
+  // in 'password_reset_codes/{email}'.
+  // Returns success: true only when:
+  //   • The document exists
+  //   • The code matches (case-insensitive trim)
+  //   • The code has not expired (expiresAt > now)
+  //   • The code has not already been used
+  // Does NOT mark the code as used here — that happens in
+  // resetPasswordWithCode() after the new password is saved.
+  // =========================================================
+  static Future<BackendResult> verifyPasswordResetCode({
+    required String email,
+    required String code,
+  }) async {
+    try {
+      final trimmedEmail = email.trim().toLowerCase();
+      final doc = await _firestore
+          .collection('password_reset_codes')
+          .doc(trimmedEmail)
+          .get();
+
+      if (!doc.exists) {
+        return BackendResult(
+            success: false, message: 'No reset code found. Please request a new one.');
+      }
+
+      final data = doc.data()!;
+      final storedCode = data['code'] as String? ?? '';
+      final expiresAt = (data['expiresAt'] as Timestamp).toDate();
+      final used = data['used'] == true;
+
+      if (used) {
+        return BackendResult(
+            success: false,
+            message: 'This code has already been used. Please request a new one.');
+      }
+
+      if (DateTime.now().isAfter(expiresAt)) {
+        return BackendResult(
+            success: false,
+            message: 'Code has expired. Please request a new one.');
+      }
+
+      if (code.trim() != storedCode.trim()) {
+        return BackendResult(success: false, message: 'Incorrect verification code.');
+      }
+
+      return BackendResult(success: true);
+    } catch (e) {
+      return BackendResult(success: false, message: e.toString());
+    }
+  }
+
+  // =========================================================
+  // FORGOT PASSWORD — RESET WITH VERIFIED CODE
+  // Called after verifyPasswordResetCode returns success.
+  // Steps:
+  //   1. Re-verify the code is still valid (guard against race conditions).
+  //   2. Sign in silently to obtain a fresh Firebase Auth token.
+  //      Because the user is not logged in, we use the stored email to
+  //      look up their uid, then use Admin SDK via a Cloud Function OR
+  //      re-sign-in via the temporary token approach.
+  //
+  // IMPLEMENTATION NOTE:
+  //   Firebase Auth does not allow client-side password change without
+  //   re-authentication. The cleanest client-safe approach is:
+  //     a. Send a standard Firebase password-reset email (link).
+  //     b. After code verification, call confirmPasswordReset(oobCode, newPw)
+  //        — but oobCode comes from the email link, not from our custom code.
+  //
+  //   Since we are using a CUSTOM code flow (not the Firebase link flow),
+  //   the recommended pattern is to handle the actual password update in a
+  //   Cloud Function triggered by writing the new (bcrypt-hashed or plain)
+  //   password to a secure Firestore sub-document.
+  //
+  //   For THIS implementation we write the new password + verified flag to
+  //   'password_reset_codes/{email}' and expect a server-side Cloud Function
+  //   (updatePasswordOnVerified) to pick it up, call admin.auth().updateUser(),
+  //   then delete the document.
+  //
+  //   If you have no Cloud Function yet, replace the Firestore write below
+  //   with a direct HTTPS callable function call.
+  // =========================================================
+  static Future<BackendResult> resetPasswordWithCode({
+    required String email,
+    required String code,
+    required String newPassword,
+  }) async {
+    try {
+      // ── Re-verify before committing ──
+      final verify = await verifyPasswordResetCode(email: email, code: code);
+      if (!verify.success) return verify;
+
+      if (newPassword.trim().length < 6) {
+        return BackendResult(
+            success: false,
+            message: 'Password must be at least 6 characters.');
+      }
+
+      final trimmedEmail = email.trim().toLowerCase();
+
+      // ── Mark code as used + store new password for Cloud Function ──
+      // The Cloud Function 'updatePasswordOnVerified' watches this doc,
+      // calls admin.auth().updateUser({ password: newPassword }), then
+      // deletes the document.
+      await _firestore
+          .collection('password_reset_codes')
+          .doc(trimmedEmail)
+          .update({
+        'used': true,
+        'newPassword': newPassword.trim(), // Cloud Function reads & deletes this
+        'resetAt': FieldValue.serverTimestamp(),
+      });
+
+      return BackendResult(
+        success: true,
+        message: 'Password has been reset successfully. You can now log in.',
+      );
+    } catch (e) {
+      return BackendResult(success: false, message: e.toString());
     }
   }
 
@@ -859,7 +1178,7 @@ class BackendService {
         return BackendResult(
             success: false, message: 'Already attending this event');
       }
-      
+
       // Clamp plus-one to 0 or 1, consume slots accordingly
       final guests = plusOne.clamp(0, 1);
       final slotsNeeded = 1 + guests;
@@ -867,7 +1186,7 @@ class BackendService {
         return BackendResult(
             success: false, message: 'Not enough available slots.');
       }
-      
+
       await _firestore.collection('event_attendance').add({
         'uid': uid,
         'eventId': upcomingEvent.id,
@@ -981,6 +1300,30 @@ class BackendService {
     try {
       final user = _auth.currentUser;
       if (user == null) throw Exception('User not logged in');
+
+      // ── Duplicate name check (exclude current user) ──
+      final nameTaken = await isDuplicateName(name, excludeUid: user.uid);
+      if (nameTaken) {
+        return BackendResult(
+          success: false,
+          message:
+              'The name "$name" is already in use by another account.',
+        );
+      }
+
+      // ── Duplicate phone check (exclude current user) ──
+      if (phone.trim().isNotEmpty) {
+        final phoneTaken =
+            await isDuplicatePhone(phone.trim(), excludeUid: user.uid);
+        if (phoneTaken) {
+          return BackendResult(
+            success: false,
+            message:
+                'The phone number "${phone.trim()}" is already linked to another account.',
+          );
+        }
+      }
+
       await _firestore.collection('users').doc(user.uid).set({
         'name': name.trim(),
         'phone': phone.trim(),
@@ -2343,7 +2686,6 @@ class BackendService {
       return null;
     }
   }
-  
 
   // =========================================================
   // GENERATE AND SAVE QR CODE
@@ -2412,5 +2754,4 @@ class BackendService {
       return null;
     }
   }
-
 }
