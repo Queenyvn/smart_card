@@ -27,6 +27,7 @@ class _RegisterPageState extends State<RegisterPage> {
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _addressController = TextEditingController();
+  final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _businessNameController = TextEditingController();
   final TextEditingController _businessNatureController = TextEditingController();
 
@@ -35,6 +36,8 @@ class _RegisterPageState extends State<RegisterPage> {
   LatLng? _pinnedLocation;
 
   bool _isLoading = false;
+  // Controls show/hide on the password field in registration
+  bool _obscurePassword = true;
   String? _message;
 
   Uint8List? _orFileBytes;
@@ -45,6 +48,7 @@ class _RegisterPageState extends State<RegisterPage> {
     _nameController.dispose();
     _passwordController.dispose();
     _addressController.dispose();
+    _phoneController.dispose();
     _businessNameController.dispose();
     _businessNatureController.dispose();
     _businessAddressController.dispose();
@@ -426,6 +430,7 @@ class _RegisterPageState extends State<RegisterPage> {
 
   // ================================================================
   // SUBMIT
+  // Validates duplicate name and phone before calling the backend.
   // ================================================================
   Future<void> _submitRegistration() async {
     if (!_formKey.currentState!.validate()) return;
@@ -445,13 +450,51 @@ class _RegisterPageState extends State<RegisterPage> {
       _message = null;
     });
 
+    // ── Pre-flight duplicate checks (client-side fast feedback) ──
+    // These checks also run inside BackendService, but doing them here
+    // first lets us show a clear inline error without a full submit attempt.
+
+    final name = _nameController.text.trim();
+    final phone = _phoneController.text.trim();
+
+    try {
+      // Check duplicate name
+      final nameTaken = await BackendService.isDuplicateName(name);
+      if (!mounted) return;
+      if (nameTaken) {
+        setState(() {
+          _isLoading = false;
+          _message =
+              'Error: The name "$name" is already registered. Please use your full legal name or contact the admin.';
+        });
+        return;
+      }
+
+      // Check duplicate phone (only when provided)
+      if (phone.isNotEmpty) {
+        final phoneTaken = await BackendService.isDuplicatePhone(phone);
+        if (!mounted) return;
+        if (phoneTaken) {
+          setState(() {
+            _isLoading = false;
+            _message =
+                'Error: The phone number "$phone" is already linked to another account.';
+          });
+          return;
+        }
+      }
+    } catch (e) {
+      // Network/Firestore error during pre-check — let the backend handle it
+    }
+
     try {
       final result = await BackendService.registerGoogleUserForApproval(
         googleUser: widget.googleUser,
-        name: _nameController.text.trim(),
+        name: name,
         password: _passwordController.text.trim(),
         address: _addressController.text.trim(),
         userType: 'Business',
+        phone: phone.isNotEmpty ? phone : null,
         businessName: _businessNameController.text.trim(),
         businessNature: _businessNatureController.text.trim(),
         orFileBytes: _orFileBytes,
@@ -529,20 +572,40 @@ class _RegisterPageState extends State<RegisterPage> {
               const SizedBox(height: 20),
 
               // Full Name
+              // Validated server-side for uniqueness; error shown in _message.
               TextFormField(
                 controller: _nameController,
-                decoration: const InputDecoration(labelText: 'Full Name'),
+                decoration: const InputDecoration(
+                  labelText: 'Full Name',
+                  hintText: 'Enter your full legal name',
+                  prefixIcon: Icon(Icons.person_outline),
+                ),
                 validator: (value) =>
-                    value!.isEmpty ? 'Required' : null,
+                    value == null || value.trim().isEmpty ? 'Required' : null,
               ),
               const SizedBox(height: 12),
 
-              // Password
+              // Password — with show/hide toggle
               TextFormField(
                 controller: _passwordController,
-                decoration:
-                    const InputDecoration(labelText: 'Password'),
-                obscureText: true,
+                obscureText: _obscurePassword,
+                decoration: InputDecoration(
+                  labelText: 'Password',
+                  prefixIcon: const Icon(Icons.lock_outline),
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      _obscurePassword
+                          ? Icons.visibility_off_outlined
+                          : Icons.visibility_outlined,
+                      color: Colors.grey,
+                    ),
+                    tooltip: _obscurePassword
+                        ? 'Show password'
+                        : 'Hide password',
+                    onPressed: () =>
+                        setState(() => _obscurePassword = !_obscurePassword),
+                  ),
+                ),
                 validator: (value) =>
                     value == null || value.length < 6
                         ? 'Password must be at least 6 characters'
@@ -553,20 +616,38 @@ class _RegisterPageState extends State<RegisterPage> {
               // Personal Address
               TextFormField(
                 controller: _addressController,
-                decoration:
-                    const InputDecoration(labelText: 'Personal Address'),
+                decoration: const InputDecoration(
+                  labelText: 'Personal Address',
+                  prefixIcon: Icon(Icons.home_outlined),
+                ),
                 validator: (value) =>
-                    value!.isEmpty ? 'Required' : null,
+                    value == null || value.trim().isEmpty ? 'Required' : null,
+              ),
+              const SizedBox(height: 12),
+
+              // Phone Number (used for duplicate detection)
+              TextFormField(
+                controller: _phoneController,
+                keyboardType: TextInputType.phone,
+                decoration: const InputDecoration(
+                  labelText: 'Phone Number (Optional)',
+                  hintText: 'e.g. 09171234567',
+                  prefixIcon: Icon(Icons.phone_outlined),
+                ),
+                // No required validator — phone is optional at registration.
+                // Duplicate check is done in _submitRegistration.
               ),
               const SizedBox(height: 12),
 
               // Business Name
               TextFormField(
                 controller: _businessNameController,
-                decoration:
-                    const InputDecoration(labelText: 'Business Name'),
+                decoration: const InputDecoration(
+                  labelText: 'Business Name',
+                  prefixIcon: Icon(Icons.business_outlined),
+                ),
                 validator: (value) =>
-                    value!.isEmpty ? 'Required' : null,
+                    value == null || value.trim().isEmpty ? 'Required' : null,
               ),
               const SizedBox(height: 12),
 
@@ -574,9 +655,11 @@ class _RegisterPageState extends State<RegisterPage> {
               TextFormField(
                 controller: _businessNatureController,
                 decoration: const InputDecoration(
-                    labelText: 'Nature of Business'),
+                  labelText: 'Nature of Business',
+                  prefixIcon: Icon(Icons.category_outlined),
+                ),
                 validator: (value) =>
-                    value!.isEmpty ? 'Required' : null,
+                    value == null || value.trim().isEmpty ? 'Required' : null,
               ),
               const SizedBox(height: 16),
 
