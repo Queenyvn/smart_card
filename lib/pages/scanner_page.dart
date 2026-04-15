@@ -32,7 +32,6 @@ class _ScannerPageState extends State<ScannerPage> {
               });
               debugPrint('Barcode found: $code');
 
-              // Example: show scanned result in a dialog
               showDialog(
                 context: context,
                 builder: (_) => AlertDialog(

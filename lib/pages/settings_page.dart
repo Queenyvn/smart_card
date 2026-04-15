@@ -2,27 +2,11 @@ import 'package:flutter/material.dart';
 
 // =========================================================
 // THEME NOTIFIER
-// Holds the current ThemeMode and notifies listeners on change.
-// Wrap your MaterialApp with a ListenableBuilder (or use a
-// state-management solution) and pass themeNotifier.value to
-// MaterialApp.themeMode.
-//
-// Usage in main.dart:
-//   ListenableBuilder(
-//     listenable: themeNotifier,
-//     builder: (context, _) => MaterialApp(
-//       theme: ThemeData.light(),
-//       darkTheme: ThemeData.dark(),
-//       themeMode: themeNotifier.value,
-//       ...
-//     ),
-//   );
 // =========================================================
 class ThemeNotifier extends ValueNotifier<ThemeMode> {
   ThemeNotifier() : super(ThemeMode.system);
 }
 
-/// Global instance — import and reference wherever needed.
 final themeNotifier = ThemeNotifier();
 
 // =========================================================
@@ -41,7 +25,7 @@ class SettingsPage extends StatelessWidget {
       ),
       body: ListView(
         children: [
-          // ── Account ─────────────────────────────────────────────────
+          // Account
           _buildSection(
             context,
             title: "Account",
@@ -51,7 +35,7 @@ class SettingsPage extends StatelessWidget {
             ),
           ),
 
-          // ── Privacy & Security ───────────────────────────────────────
+          // Privacy & Security 
           _buildSection(
             context,
             title: "Privacy & Security",
@@ -61,7 +45,7 @@ class SettingsPage extends StatelessWidget {
             ),
           ),
 
-          // ── Display (Dark Mode) ──────────────────────────────────────
+          // Display (Dark Mode) not working yet
           _buildSection(
             context,
             title: "Display",
@@ -101,7 +85,7 @@ class AccountPage extends StatelessWidget {
       appBar: AppBar(title: const Text("Account")),
       body: ListView(
         children: [
-          // ── Change Password ─────────────────────────────────────────
+          // Change Password 
           ListTile(
             leading: const Icon(Icons.lock_outline),
             title: const Text("Change Password"),
@@ -114,7 +98,7 @@ class AccountPage extends StatelessWidget {
 
           const Divider(height: 1, indent: 16, endIndent: 16),
 
-          // ── Logout ──────────────────────────────────────────────────
+          // Logout 
           ListTile(
             leading: const Icon(Icons.logout, color: Colors.red),
             title: const Text(
@@ -128,7 +112,7 @@ class AccountPage extends StatelessWidget {
     );
   }
 
-  // ── Logout Confirmation Dialog ────────────────────────────────────────
+  // Logout Confirmation Dialog 
   void _showLogoutDialog(BuildContext context) {
     showDialog(
       context: context,
@@ -142,7 +126,6 @@ class AccountPage extends StatelessWidget {
           ),
           TextButton(
             onPressed: () {
-              // TODO: Firebase sign out logic
               Navigator.pop(context);
             },
             child: const Text(
@@ -158,7 +141,6 @@ class AccountPage extends StatelessWidget {
 
 // =========================================================
 // CHANGE PASSWORD PAGE
-// TODO: Wire up Firebase reauthentication + updatePassword
 // =========================================================
 class ChangePasswordPage extends StatefulWidget {
   const ChangePasswordPage({super.key});
@@ -210,8 +192,6 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
       );
       return;
     }
-
-    // TODO: Firebase reauthenticate then call user.updatePassword(newPass)
   }
 
   @override
@@ -223,7 +203,7 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // ── Current Password ────────────────────────────────────
+            //  Current Password 
             TextField(
               controller: _currentPasswordController,
               obscureText: _obscureCurrent,
@@ -241,7 +221,7 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
             ),
             const SizedBox(height: 16),
 
-            // ── New Password ────────────────────────────────────────
+            // New Password 
             TextField(
               controller: _newPasswordController,
               obscureText: _obscureNew,
@@ -259,7 +239,7 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
             ),
             const SizedBox(height: 16),
 
-            // ── Confirm New Password ────────────────────────────────
+            // Confirm New Password 
             TextField(
               controller: _confirmPasswordController,
               obscureText: _obscureConfirm,
@@ -277,7 +257,7 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
             ),
             const SizedBox(height: 24),
 
-            // ── Save Button ─────────────────────────────────────────
+            // Save Button 
             ElevatedButton(
               onPressed: _handleChangePassword,
               child: const Text("Save Changes"),
@@ -291,8 +271,6 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
 
 // =========================================================
 // PRIVACY & SECURITY PAGE
-// Contains: Manage Data / Privacy, Terms & Conditions,
-//           Privacy Policy
 // =========================================================
 class PrivacySecurityPage extends StatelessWidget {
   const PrivacySecurityPage({super.key});
@@ -303,7 +281,6 @@ class PrivacySecurityPage extends StatelessWidget {
       appBar: AppBar(title: const Text("Privacy & Security")),
       body: ListView(
         children: [
-          // ── Manage Data / Privacy ───────────────────────────────────
           ListTile(
             leading: const Icon(Icons.manage_accounts_outlined),
             title: const Text("Manage Data / Privacy"),
@@ -316,23 +293,19 @@ class PrivacySecurityPage extends StatelessWidget {
 
           const Divider(height: 1, indent: 16, endIndent: 16),
 
-          // ── Terms & Conditions ──────────────────────────────────────
           ListTile(
             leading: const Icon(Icons.description_outlined),
             title: const Text("Terms & Conditions"),
             trailing: const Icon(Icons.chevron_right),
             onTap: () {
-              // TODO: Navigate to Terms & Conditions detail page / webview
             },
           ),
 
-          // ── Privacy Policy ──────────────────────────────────────────
           ListTile(
             leading: const Icon(Icons.privacy_tip_outlined),
             title: const Text("Privacy Policy"),
             trailing: const Icon(Icons.chevron_right),
             onTap: () {
-              // TODO: Navigate to Privacy Policy detail page / webview
             },
           ),
         ],
@@ -343,10 +316,6 @@ class PrivacySecurityPage extends StatelessWidget {
 
 // =========================================================
 // MANAGE DATA / PRIVACY PAGE
-// Placeholder — add data management options here such as:
-// - Download your data
-// - Clear activity history
-// - Data sharing preferences
 // =========================================================
 class ManageDataPage extends StatelessWidget {
   const ManageDataPage({super.key});
@@ -367,10 +336,7 @@ class ManageDataPage extends StatelessWidget {
 }
 
 // =========================================================
-// DISPLAY PAGE
-// Lets the user switch between Device / Light / Dark mode.
-// Updates the global [themeNotifier] which drives ThemeMode
-// in MaterialApp — no restart required.
+// DISPLAY PAGE not working yet
 // =========================================================
 class DisplayPage extends StatefulWidget {
   const DisplayPage({super.key});
@@ -387,7 +353,7 @@ class _DisplayPageState extends State<DisplayPage> {
   @override
   void initState() {
     super.initState();
-    // Convert ThemeMode → local string key
+    // Convert ThemeMode to local string key
     switch (themeNotifier.value) {
       case ThemeMode.light:
         _selectedMode = "light";
