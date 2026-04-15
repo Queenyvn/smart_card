@@ -13,9 +13,6 @@ const LatLng _caviteCenter = LatLng(14.2456, 120.8786);
 
 // ================================================================
 // LOCAL BUSINESS FORM MODEL (UI only — not stored directly)
-// Used when the user is adding a new business in edit mode.
-// On save, this gets submitted to the 'businesses' collection
-// via BackendService.submitBusiness().
 // ================================================================
 class BusinessForm {
   final TextEditingController name;
@@ -67,10 +64,6 @@ class _UserProfilePageState extends State<UserProfilePage> {
   bool isEditing = false;
   bool _isLoading = false;
   bool _isSaving = false;
-
-  // Profile picture state
-  // _profileImageBytes  → bytes shown immediately after picking (before upload)
-  // _profileImageUrl    → the remote URL saved in Firestore (shown when not editing)
   Uint8List? _profileImageBytes;
   String? _profileImageUrl;
   bool _isUploadingProfilePic = false;
@@ -81,11 +74,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
   final emailController = TextEditingController();
   final phoneController = TextEditingController();
   final addressController = TextEditingController();
-
-  // All businesses from the 'businesses' collection (any status)
   List<BusinessRecord> _businesses = [];
-
-  // New business forms being filled in during edit mode (not yet submitted)
   final List<BusinessForm> _newForms = [];
 
   @override
@@ -129,7 +118,6 @@ class _UserProfilePageState extends State<UserProfilePage> {
         addressController.text = data['address'] ?? '';
         roleController.text = data['userType'] ?? '';
         _profileImageUrl = data['logoUrl'] as String?;
-        // Clear any local preview so we display the fresh remote URL
         _profileImageBytes = null;
       });
     }
@@ -142,7 +130,6 @@ class _UserProfilePageState extends State<UserProfilePage> {
   Future<void> _saveProfile() async {
     setState(() => _isSaving = true);
 
-    // Validate new business forms
     for (final form in _newForms) {
       if (form.name.text.trim().isEmpty) {
         _showError('Please enter a business name for all new businesses.');
@@ -157,7 +144,6 @@ class _UserProfilePageState extends State<UserProfilePage> {
       }
     }
 
-    // Save personal info
     final result = await BackendService.saveUserProfile(
       name: nameController.text.trim(),
       phone: phoneController.text.trim(),
@@ -170,7 +156,6 @@ class _UserProfilePageState extends State<UserProfilePage> {
       return;
     }
 
-    // Submit each new business form to the 'businesses' collection
     for (final form in _newForms) {
       final submitResult = await BackendService.submitBusiness(
         name: form.name.text.trim(),
@@ -192,7 +177,6 @@ class _UserProfilePageState extends State<UserProfilePage> {
       }
     }
 
-    // Clear new forms after submission
     for (final f in _newForms) f.dispose();
     _newForms.clear();
 
@@ -210,9 +194,6 @@ class _UserProfilePageState extends State<UserProfilePage> {
 
   // ================================================================
   // PICK & UPLOAD PROFILE PICTURE
-  // Immediately shows a local preview, then uploads to Cloudinary,
-  // saves the URL to Firestore (and all conversation docs), and
-  // updates the displayed URL once done.
   // ================================================================
   Future<void> _pickAndUploadProfilePicture() async {
     final XFile? file = await _picker.pickImage(
@@ -225,7 +206,6 @@ class _UserProfilePageState extends State<UserProfilePage> {
 
     final bytes = await file.readAsBytes();
 
-    // Show local preview right away
     setState(() {
       _profileImageBytes = bytes;
       _isUploadingProfilePic = true;
@@ -242,7 +222,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
 
     if (result.success) {
       setState(() {
-        _profileImageUrl = result.message; // URL is returned in message field
+        _profileImageUrl = result.message;
         _isUploadingProfilePic = false;
       });
       ScaffoldMessenger.of(context).showSnackBar(
@@ -582,8 +562,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
   }
 
   // ================================================================
-  // APPROVED / PENDING / REJECTED BUSINESS RECORD CARD (read-only)
-  // Shows a card for each BusinessRecord from the 'businesses' collection.
+  // APPROVED / PENDING / REJECTED BUSINESS RECORD CARD 
   // ================================================================
   Widget _businessRecordCard(BusinessRecord biz, int displayIndex) {
     Color statusColor;
@@ -680,7 +659,6 @@ class _UserProfilePageState extends State<UserProfilePage> {
               ],
             ),
 
-            // Map preview (approved businesses with a pin)
             if (biz.isApproved && biz.lat != null && biz.lng != null) ...[
               const SizedBox(height: 10),
               ClipRRect(
@@ -744,7 +722,6 @@ class _UserProfilePageState extends State<UserProfilePage> {
               ),
             ],
 
-            // DTI document status
             const SizedBox(height: 8),
             Row(
               children: [
@@ -772,7 +749,6 @@ class _UserProfilePageState extends State<UserProfilePage> {
               ],
             ),
 
-            // Rejection reason
             if (biz.isRejected && biz.rejectionReason != null) ...[
               const SizedBox(height: 8),
               Container(
@@ -800,7 +776,6 @@ class _UserProfilePageState extends State<UserProfilePage> {
               ),
             ],
 
-            // Submitted date
             const SizedBox(height: 6),
             Text(
               'Submitted: ${_formatDate(biz.submittedAt)}',
@@ -1274,8 +1249,6 @@ class _UserProfilePageState extends State<UserProfilePage> {
 
   // ================================================================
   // BUILD THE PROFILE AVATAR
-  // Priority: local bytes preview > remote URL > fallback asset
-  // Shows a loading ring while the upload is in progress.
   // ================================================================
   Widget _buildProfileAvatar() {
     ImageProvider image;
@@ -1288,7 +1261,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
     }
 
     return GestureDetector(
-      onTap: _pickAndUploadProfilePicture, // tappable at all times
+      onTap: _pickAndUploadProfilePicture,
       child: Stack(
         alignment: Alignment.center,
         children: [
@@ -1364,10 +1337,8 @@ class _UserProfilePageState extends State<UserProfilePage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ── Profile picture ──────────────────────────────────────────────
             Center(child: _buildProfileAvatar()),
             const SizedBox(height: 8),
-            // Tap-hint label
             Center(
               child: Text(
                 'Tap photo to update',
@@ -1379,7 +1350,6 @@ class _UserProfilePageState extends State<UserProfilePage> {
             ),
             const SizedBox(height: 20),
 
-            // ── Personal info ──
             _labeledField(label: 'Name', controller: nameController),
             _labeledField(label: 'Role/Title', controller: roleController),
             _labeledField(
@@ -1395,7 +1365,6 @@ class _UserProfilePageState extends State<UserProfilePage> {
 
             const Divider(height: 32),
 
-            // ── BUSINESSES HEADER ──
             Row(
               children: [
                 Text('Businesses',
@@ -1436,7 +1405,6 @@ class _UserProfilePageState extends State<UserProfilePage> {
             ),
             const SizedBox(height: 8),
 
-            // ── ALL BUSINESS RECORDS (single collection, any status) ──
             if (_businesses.isEmpty && !isEditing)
               Container(
                 padding: const EdgeInsets.all(16),
@@ -1458,7 +1426,6 @@ class _UserProfilePageState extends State<UserProfilePage> {
             for (int i = 0; i < _businesses.length; i++)
               _businessRecordCard(_businesses[i], i + 1),
 
-            // ── ADD BUSINESS BUTTON (edit mode) ──
             if (isEditing) ...[
               const SizedBox(height: 4),
               OutlinedButton.icon(
@@ -1482,12 +1449,10 @@ class _UserProfilePageState extends State<UserProfilePage> {
                 },
               ),
 
-              // ── NEW BUSINESS FORMS ──
               for (int i = 0; i < _newForms.length; i++)
                 _newBusinessFormCard(i),
             ],
 
-            // ── SAVE / CANCEL ──
             if (isEditing) ...[
               const SizedBox(height: 24),
               Row(

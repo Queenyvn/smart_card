@@ -430,7 +430,6 @@ class _RegisterPageState extends State<RegisterPage> {
 
   // ================================================================
   // SUBMIT
-  // Validates duplicate name and phone before calling the backend.
   // ================================================================
   Future<void> _submitRegistration() async {
     if (!_formKey.currentState!.validate()) return;
@@ -625,7 +624,7 @@ class _RegisterPageState extends State<RegisterPage> {
               ),
               const SizedBox(height: 12),
 
-              // Phone Number (used for duplicate detection)
+              // Phone Number 
               TextFormField(
                 controller: _phoneController,
                 keyboardType: TextInputType.phone,
@@ -634,8 +633,6 @@ class _RegisterPageState extends State<RegisterPage> {
                   hintText: 'e.g. 09171234567',
                   prefixIcon: Icon(Icons.phone_outlined),
                 ),
-                // No required validator — phone is optional at registration.
-                // Duplicate check is done in _submitRegistration.
               ),
               const SizedBox(height: 12),
 
@@ -663,7 +660,7 @@ class _RegisterPageState extends State<RegisterPage> {
               ),
               const SizedBox(height: 16),
 
-              // ── Business Location (new) ──
+              // Business Location (new) 
               _buildBusinessLocationSection(),
               const SizedBox(height: 16),
 

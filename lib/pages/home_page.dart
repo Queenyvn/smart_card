@@ -27,7 +27,6 @@ class _HomePageState extends State<HomePage> {
   int _selectedIndex = 0;
   String _userName = "Loading...";
   String? _userLogoUrl;
-  // Key to force-rebuild the entire page when Home is tapped
   Key _pageKey = UniqueKey();
 
   @override
@@ -48,7 +47,6 @@ class _HomePageState extends State<HomePage> {
 
   void _onItemTapped(int index) {
     if (index == 0) {
-      // Restart home page by refreshing key
       setState(() {
         _selectedIndex = 0;
         _pageKey = UniqueKey();
@@ -117,10 +115,6 @@ class _HomePageState extends State<HomePage> {
   }
 }
 
-// ── MAIN SCROLLABLE BODY ─────────────────────────────────────────────────────
-// Uses a CustomScrollView with SliverList so the "Feed" header sticks
-// and the posts stream below it in an infinite-scroll pattern.
-
 class _HomeBody extends StatefulWidget {
   final String userName;
   final String? userLogoUrl;
@@ -134,7 +128,6 @@ class _HomeBody extends StatefulWidget {
 class _HomeBodyState extends State<_HomeBody> {
   bool _isHovering = false;
 
-  // Newest members — fetched once on init
   List<Map<String, dynamic>> _newestMembers = [];
   bool _loadingNewMembers = true;
 
@@ -153,8 +146,6 @@ class _HomeBodyState extends State<_HomeBody> {
       });
     }
   }
-
-  // ── static content sections ──────────────────────────────────────────────
 
   Widget _header(BuildContext context) {
     return Container(
@@ -335,104 +326,181 @@ class _HomeBodyState extends State<_HomeBody> {
     );
   }
 
-  Widget _recentlyInteracted(BuildContext context) {
-    final people = [
-      {'name': 'Arjon Fulgencio', 'role': 'Business Owner', 'img': 'assets/profile.jpg'},
-      {'name': 'Athala Odiver', 'role': 'Marketing Specialist', 'img': 'assets/profile.jpg'},
-      {'name': 'Khyla Diaz', 'role': 'Tech Entrepreneur', 'img': 'assets/profile.jpg'},
-    ];
+  Widget _recentlyConnected(BuildContext context) {
+    return StreamBuilder<List<Map<String, dynamic>>>(
+      stream: BackendService.myConnectionsStream(),
+      builder: (context, snap) {
+        final connections = snap.data ?? [];
+        final sorted = [...connections]..sort((a, b) {
+            final aT = a['connectedAt'];
+            final bT = b['connectedAt'];
+            if (aT == null && bT == null) return 0;
+            if (aT == null) return 1;
+            if (bT == null) return -1;
+            try {
+              return (bT as dynamic)
+                  .toDate()
+                  .compareTo((aT as dynamic).toDate());
+            } catch (_) {
+              return 0;
+            }
+          });
+        final recent = sorted.take(3).toList();
 
-    final controller = PageController(viewportFraction: 0.82);
+        if (snap.connectionState == ConnectionState.waiting) {
+          return const SizedBox.shrink();
+        }
+        if (recent.isEmpty) return const SizedBox.shrink();
 
-    return Container(
-      color: Colors.white,
-      padding: const EdgeInsets.fromLTRB(16, 12, 0, 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Padding(
-            padding: EdgeInsets.only(right: 16),
-            child: Text("Recently Interacted With...",
-                style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
-          ),
-          const SizedBox(height: 10),
-          SizedBox(
-            height: 130,
-            child: PageView.builder(
-              controller: controller,
-              itemCount: people.length,
-              itemBuilder: (context, i) {
-                final p = people[i];
-                return Padding(
-                  padding: const EdgeInsets.only(right: 12),
-                  child: Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF9F9F9),
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: Colors.grey.shade200),
-                    ),
-                    child: Row(
-                      children: [
-                        CircleAvatar(
-                          radius: 26,
-                          backgroundImage: AssetImage(p['img']!),
+        final controller = PageController(viewportFraction: 0.82);
+
+        return Container(
+          color: Colors.white,
+          padding: const EdgeInsets.fromLTRB(16, 12, 0, 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Padding(
+                padding: EdgeInsets.only(right: 16),
+                child: Text(
+                  "Recently Connected With...",
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                ),
+              ),
+              const SizedBox(height: 10),
+              SizedBox(
+                height: 130,
+                child: PageView.builder(
+                  controller: controller,
+                  itemCount: recent.length,
+                  itemBuilder: (context, i) {
+                    final member = recent[i];
+                    final name = member['name'] as String? ?? 'Member';
+                    final role =
+                        member['userType'] as String? ?? 'CBOC Member';
+                    final logoUrl = member['logoUrl'] as String?;
+                    final uid = member['uid'] as String? ?? '';
+
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 12),
+                      child: Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF9F9F9),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: Colors.grey.shade200),
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(p['name']!,
-                                  style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 13)),
-                              Text(p['role']!,
-                                  style: const TextStyle(
-                                      color: Colors.grey, fontSize: 11)),
-                              const SizedBox(height: 8),
-                              SizedBox(
-                                width: double.infinity,
-                                height: 32,
-                                child: ElevatedButton(
-                                  onPressed: () => Navigator.push(context,
-                                      MaterialPageRoute(
-                                          builder: (_) =>
-                                              const UserProfilePage())),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.red,
-                                    shape: RoundedRectangleBorder(
-                                        borderRadius:
-                                            BorderRadius.circular(8)),
-                                    padding: EdgeInsets.zero,
-                                  ),
-                                  child: const Text("View Profile",
-                                      style: TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w600)),
-                                ),
+                        child: Row(
+                          children: [
+                            GestureDetector(
+                              onTap: uid.isNotEmpty
+                                  ? () => _openMemberPortfolio(context, uid)
+                                  : null,
+                              child: CircleAvatar(
+                                radius: 26,
+                                backgroundColor: Colors.red.shade100,
+                                backgroundImage: logoUrl != null
+                                    ? NetworkImage(logoUrl) as ImageProvider
+                                    : null,
+                                child: logoUrl == null
+                                    ? Text(
+                                        name.isNotEmpty
+                                            ? name[0].toUpperCase()
+                                            : '?',
+                                        style: const TextStyle(
+                                            color: Colors.red,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 18),
+                                      )
+                                    : null,
                               ),
-                            ],
-                          ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  GestureDetector(
+                                    onTap: uid.isNotEmpty
+                                        ? () =>
+                                            _openMemberPortfolio(context, uid)
+                                        : null,
+                                    child: Text(
+                                      name,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 13),
+                                    ),
+                                  ),
+                                  Text(
+                                    role,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                        color: Colors.grey, fontSize: 11),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Row(
+                                    children: [
+                                      const Icon(
+                                          Icons.check_circle_rounded,
+                                          size: 11,
+                                          color: Colors.green),
+                                      const SizedBox(width: 3),
+                                      const Text(
+                                        'Connected',
+                                        style: TextStyle(
+                                            color: Colors.green,
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w600),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 6),
+                                  SizedBox(
+                                    width: double.infinity,
+                                    height: 30,
+                                    child: ElevatedButton(
+                                      onPressed: uid.isNotEmpty
+                                          ? () => _openMemberPortfolio(
+                                              context, uid)
+                                          : null,
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.red,
+                                        shape: RoundedRectangleBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(8)),
+                                        padding: EdgeInsets.zero,
+                                      ),
+                                      child: const Text(
+                                        "View Profile",
+                                        style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w600),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 
-  // ================================================================
-  // NEW ON CBOC  — replaces the old "Mutuals" section.
-  // Shows the 3 most recently joined (approved) members.
-  // ================================================================
   Widget _newOnCBOC() {
     return Container(
       color: Colors.white,
@@ -440,7 +508,6 @@ class _HomeBodyState extends State<_HomeBody> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Section header
           Row(
             children: [
               const Text(
@@ -468,7 +535,6 @@ class _HomeBodyState extends State<_HomeBody> {
           ),
           const SizedBox(height: 10),
 
-          // Loading state
           if (_loadingNewMembers)
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 20),
@@ -500,7 +566,6 @@ class _HomeBodyState extends State<_HomeBody> {
               final logoUrl = member['logoUrl'] as String?;
               final uid = member['uid'] as String? ?? '';
 
-              // Compute how long ago they joined
               final createdAt = member['createdAt'];
               String joinedLabel = 'Recently joined';
               if (createdAt != null) {
@@ -509,7 +574,6 @@ class _HomeBodyState extends State<_HomeBody> {
                   dt = createdAt;
                 } else {
                   try {
-                    // Firestore Timestamp comes as a Map when fetched via generic map
                     dt = (createdAt as dynamic).toDate() as DateTime?;
                   } catch (_) {}
                 }
@@ -523,109 +587,114 @@ class _HomeBodyState extends State<_HomeBody> {
                     joinedLabel = 'Joined ${diff.inDays}d ago';
                   } else if (diff.inDays < 30) {
                     final weeks = (diff.inDays / 7).floor();
-                    joinedLabel =
-                        'Joined ${weeks}w ago';
+                    joinedLabel = 'Joined ${weeks}w ago';
                   } else {
                     final months = (diff.inDays / 30).floor();
-                    joinedLabel =
-                        'Joined ${months}mo ago';
+                    joinedLabel = 'Joined ${months}mo ago';
                   }
                 }
               }
 
-              return Container(
-                margin: const EdgeInsets.only(bottom: 10),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF9F9F9),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.grey.shade200),
-                ),
-                child: Row(
-                  children: [
-                    // Avatar
-                    CircleAvatar(
-                      radius: 22,
-                      backgroundColor: Colors.red.shade100,
-                      backgroundImage: logoUrl != null
-                          ? NetworkImage(logoUrl) as ImageProvider
-                          : null,
-                      child: logoUrl == null
-                          ? Text(
-                              name.isNotEmpty
-                                  ? name[0].toUpperCase()
-                                  : '?',
+              return GestureDetector(
+                onTap: uid.isNotEmpty
+                    ? () => _openMemberPortfolio(context, uid)
+                    : null,
+                child: Container(
+                  margin: const EdgeInsets.only(bottom: 10),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF9F9F9),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.grey.shade200),
+                  ),
+                  child: Row(
+                    children: [
+                      GestureDetector(
+                        onTap: uid.isNotEmpty
+                            ? () => _openMemberPortfolio(context, uid)
+                            : null,
+                        child: CircleAvatar(
+                          radius: 22,
+                          backgroundColor: Colors.red.shade100,
+                          backgroundImage: logoUrl != null
+                              ? NetworkImage(logoUrl) as ImageProvider
+                              : null,
+                          child: logoUrl == null
+                              ? Text(
+                                  name.isNotEmpty
+                                      ? name[0].toUpperCase()
+                                      : '?',
+                                  style: const TextStyle(
+                                      color: Colors.red,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16),
+                                )
+                              : null,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              name,
                               style: const TextStyle(
-                                  color: Colors.red,
                                   fontWeight: FontWeight.bold,
-                                  fontSize: 16),
-                            )
-                          : null,
-                    ),
-                    const SizedBox(width: 12),
+                                  fontSize: 13),
+                            ),
+                            Text(
+                              role,
+                              style: const TextStyle(
+                                  color: Colors.grey, fontSize: 11),
+                            ),
+                            const SizedBox(height: 2),
+                            Row(
+                              children: [
+                                const Icon(Icons.fiber_new_rounded,
+                                    size: 13, color: Colors.red),
+                                const SizedBox(width: 3),
+                                Text(
+                                  joinedLabel,
+                                  style: const TextStyle(
+                                      color: Colors.red,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w600),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
 
-                    // Name + role + join date
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            name,
-                            style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 13),
-                          ),
-                          Text(
-                            role,
-                            style: const TextStyle(
-                                color: Colors.grey, fontSize: 11),
-                          ),
-                          const SizedBox(height: 2),
-                          Row(
-                            children: [
-                              const Icon(Icons.fiber_new_rounded,
-                                  size: 13, color: Colors.red),
-                              const SizedBox(width: 3),
-                              Text(
-                                joinedLabel,
-                                style: const TextStyle(
-                                    color: Colors.red,
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w600),
-                              ),
-                            ],
-                          ),
-                        ],
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: Colors.red.shade50,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: Colors.red.shade200),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.waving_hand_rounded,
+                                size: 13, color: Colors.red),
+                            SizedBox(width: 4),
+                            Text(
+                              'Welcome!',
+                              style: TextStyle(
+                                  color: Colors.red,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-
-                    // Welcome badge
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 5),
-                      decoration: BoxDecoration(
-                        color: Colors.red.shade50,
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: Colors.red.shade200),
-                      ),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.waving_hand_rounded,
-                              size: 13, color: Colors.red),
-                          SizedBox(width: 4),
-                          Text(
-                            'Welcome!',
-                            style: TextStyle(
-                                color: Colors.red,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               );
             }).toList()),
@@ -634,7 +703,14 @@ class _HomeBodyState extends State<_HomeBody> {
     );
   }
 
-  // ── FEED STICKY HEADER ───────────────────────────────────────────────────
+  void _openMemberPortfolio(BuildContext context, String uid) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => MemberEPortfolioPage(memberUid: uid),
+      ),
+    );
+  }
 
   Widget _feedStickyHeader(BuildContext context) {
     return Container(
@@ -678,7 +754,6 @@ class _HomeBodyState extends State<_HomeBody> {
               ],
             ),
           ),
-          // Create Post box
           _CreatePostInline(
             userLogoUrl: widget.userLogoUrl,
           ),
@@ -698,9 +773,7 @@ class _HomeBodyState extends State<_HomeBody> {
           final isLoading =
               snap.connectionState == ConnectionState.waiting && posts.isEmpty;
 
-          // Static "above-fold" content items
           final staticSlivers = <Widget>[
-            // Header + search + dashboard in one card group
             SliverToBoxAdapter(
               child: Column(
                 children: [
@@ -712,16 +785,14 @@ class _HomeBodyState extends State<_HomeBody> {
                   const SizedBox(height: 8),
                   _mapSection(),
                   const SizedBox(height: 8),
-                  _recentlyInteracted(context),
+                  _recentlyConnected(context),
                   const SizedBox(height: 8),
-                  // ── NEW ON CBOC (replaces old Mutuals) ──
                   _newOnCBOC(),
                   const SizedBox(height: 8),
                 ],
               ),
             ),
 
-            // Sticky Feed header
             SliverPersistentHeader(
               pinned: true,
               delegate: _StickyFeedHeader(
@@ -764,7 +835,6 @@ class _HomeBodyState extends State<_HomeBody> {
                     if (index < posts.length) {
                       return _FeedPostCard(post: posts[index]);
                     }
-                    // After all posts
                     return _allCaughtUp();
                   },
                   childCount: posts.length + 1,
@@ -799,8 +869,6 @@ class _HomeBodyState extends State<_HomeBody> {
   }
 }
 
-// ── STICKY HEADER DELEGATE ───────────────────────────────────────────────────
-
 class _StickyFeedHeader extends SliverPersistentHeaderDelegate {
   final Widget child;
   _StickyFeedHeader({required this.child});
@@ -819,8 +887,6 @@ class _StickyFeedHeader extends SliverPersistentHeaderDelegate {
   @override
   bool shouldRebuild(_StickyFeedHeader oldDelegate) => true;
 }
-
-// ── CREATE POST INLINE ───────────────────────────────────────────────────────
 
 class _CreatePostInline extends StatelessWidget {
   final String? userLogoUrl;
@@ -886,8 +952,6 @@ class _CreatePostInline extends StatelessWidget {
   }
 }
 
-// ── CREATE POST BOTTOM SHEET ─────────────────────────────────────────────────
-
 class _CreatePostSheet extends StatefulWidget {
   const _CreatePostSheet();
 
@@ -951,7 +1015,6 @@ class _CreatePostSheetState extends State<_CreatePostSheet> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Handle bar
           Center(
             child: Container(
               width: 40, height: 4,
@@ -1071,7 +1134,166 @@ class _CreatePostSheetState extends State<_CreatePostSheet> {
   }
 }
 
-// ── FEED POST CARD ────────────────────────────────────────────────────────────
+class _FullScreenImagePage extends StatelessWidget {
+  final String imageUrl;
+  const _FullScreenImagePage({required this.imageUrl});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        foregroundColor: Colors.white,
+        elevation: 0,
+      ),
+      body: Center(
+        child: InteractiveViewer(
+          panEnabled: true,
+          minScale: 0.5,
+          maxScale: 5.0,
+          child: Image.network(
+            imageUrl,
+            fit: BoxFit.contain,
+            loadingBuilder: (context, child, progress) {
+              if (progress == null) return child;
+              return const Center(
+                child: CircularProgressIndicator(color: Colors.white),
+              );
+            },
+            errorBuilder: (_, __, ___) => const Icon(
+              Icons.broken_image,
+              color: Colors.white54,
+              size: 64,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ConnectButton extends StatefulWidget {
+  final String targetUid;
+  const _ConnectButton({required this.targetUid});
+
+  @override
+  State<_ConnectButton> createState() => _ConnectButtonState();
+}
+
+class _ConnectButtonState extends State<_ConnectButton> {
+  String _status = 'none';
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchStatus();
+  }
+
+  Future<void> _fetchStatus() async {
+    final status =
+        await BackendService.getConnectionStatus(widget.targetUid);
+    if (mounted) setState(() { _status = status; _loading = false; });
+  }
+
+  Future<void> _handleTap() async {
+    setState(() => _loading = true);
+    if (_status == 'none') {
+      final result =
+          await BackendService.sendConnectionRequest(widget.targetUid);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(result.message ?? ''),
+          backgroundColor: result.success ? Colors.green : Colors.red,
+          behavior: SnackBarBehavior.floating,
+        ));
+        if (result.success) setState(() { _status = 'pending_sent'; _loading = false; });
+        else setState(() => _loading = false);
+      }
+    } else if (_status == 'accepted') {
+      final result = await BackendService.removeConnection(widget.targetUid);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(result.message ?? ''),
+          behavior: SnackBarBehavior.floating,
+        ));
+        if (result.success) setState(() { _status = 'none'; _loading = false; });
+        else setState(() => _loading = false);
+      }
+    } else {
+      setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return const SizedBox(
+        width: 20, height: 20,
+        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.red),
+      );
+    }
+
+    Color bgColor;
+    Color fgColor;
+    String label;
+    IconData icon;
+
+    switch (_status) {
+      case 'accepted':
+        bgColor = Colors.grey.shade100;
+        fgColor = Colors.grey.shade600;
+        label = 'Connected';
+        icon = Icons.check_circle_outline_rounded;
+        break;
+      case 'pending_sent':
+        bgColor = Colors.orange.shade50;
+        fgColor = Colors.orange.shade700;
+        label = 'Pending';
+        icon = Icons.schedule_rounded;
+        break;
+      case 'pending_received':
+        bgColor = Colors.blue.shade50;
+        fgColor = Colors.blue.shade700;
+        label = 'Accept';
+        icon = Icons.person_add_outlined;
+        break;
+      default:
+        bgColor = Colors.red;
+        fgColor = Colors.white;
+        label = 'Connect';
+        icon = Icons.person_add_outlined;
+    }
+
+    return GestureDetector(
+      onTap: (_status == 'pending_sent') ? null : _handleTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: _status == 'none' ? Colors.red : fgColor.withOpacity(0.4),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 13, color: fgColor),
+            const SizedBox(width: 4),
+            Text(label,
+                style: TextStyle(
+                    color: fgColor,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600)),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
 class _FeedPostCard extends StatefulWidget {
   final Post post;
@@ -1165,7 +1387,29 @@ class _FeedPostCardState extends State<_FeedPostCard> {
     );
   }
 
-  @override
+  void _openFullScreenImage(BuildContext context, String imageUrl) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => _FullScreenImagePage(imageUrl: imageUrl),
+      ),
+    );
+  }
+
+  void _openAuthorPortfolio(BuildContext context, String uid) {
+    try {
+      final myUid = BackendService.currentUid;
+      if (uid == myUid) {
+        Navigator.push(context,
+            MaterialPageRoute(builder: (_) => const EPortfolioPage()));
+      } else {
+        Navigator.push(context,
+            MaterialPageRoute(
+                builder: (_) => MemberEPortfolioPage(memberUid: uid)));
+      }
+    } catch (_) {}
+  }
+
   void _showPostOptions(BuildContext context) {
     final isOwner = widget.post.uid == BackendService.currentUid;
     if (!isOwner) return;
@@ -1180,14 +1424,16 @@ class _FeedPostCardState extends State<_FeedPostCard> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              width: 40, height: 4,
+              width: 40,
+              height: 4,
               margin: const EdgeInsets.symmetric(vertical: 12),
               decoration: BoxDecoration(
                   color: Colors.grey.shade300,
                   borderRadius: BorderRadius.circular(4)),
             ),
             ListTile(
-              leading: const Icon(Icons.edit_outlined, color: Color(0xFF1976D2)),
+              leading: const Icon(Icons.edit_outlined,
+                  color: Color(0xFF1976D2)),
               title: const Text('Edit Post'),
               onTap: () {
                 Navigator.pop(context);
@@ -1195,30 +1441,40 @@ class _FeedPostCardState extends State<_FeedPostCard> {
               },
             ),
             ListTile(
-              leading: const Icon(Icons.delete_outline, color: Colors.red),
-              title: const Text('Delete Post', style: TextStyle(color: Colors.red)),
+              leading:
+                  const Icon(Icons.delete_outline, color: Colors.red),
+              title: const Text('Delete Post',
+                  style: TextStyle(color: Colors.red)),
               onTap: () async {
                 Navigator.pop(context);
                 final confirm = await showDialog<bool>(
                   context: context,
                   builder: (_) => AlertDialog(
                     title: const Text('Delete Post'),
-                    content: const Text('Are you sure you want to delete this post? This cannot be undone.'),
+                    content: const Text(
+                        'Are you sure you want to delete this post? This cannot be undone.'),
                     actions: [
-                      TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+                      TextButton(
+                          onPressed: () => Navigator.pop(context, false),
+                          child: const Text('Cancel')),
                       TextButton(
                         onPressed: () => Navigator.pop(context, true),
-                        child: const Text('Delete', style: TextStyle(color: Colors.red)),
+                        child: const Text('Delete',
+                            style: TextStyle(color: Colors.red)),
                       ),
                     ],
                   ),
                 );
                 if (confirm == true && context.mounted) {
-                  final result = await BackendService.deletePost(widget.post.id);
+                  final result =
+                      await BackendService.deletePost(widget.post.id);
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                      content: Text(result.success ? 'Post deleted.' : result.message ?? 'Failed'),
-                      backgroundColor: result.success ? Colors.green : Colors.red,
+                      content: Text(result.success
+                          ? 'Post deleted.'
+                          : result.message ?? 'Failed'),
+                      backgroundColor:
+                          result.success ? Colors.green : Colors.red,
                       behavior: SnackBarBehavior.floating,
                     ));
                   }
@@ -1227,6 +1483,277 @@ class _FeedPostCardState extends State<_FeedPostCard> {
             ),
             const SizedBox(height: 8),
           ],
+        ),
+      ),
+    );
+  }
+
+  void _showRepostOptions(BuildContext context) {
+    final isOwner = widget.post.uid == BackendService.currentUid;
+    if (!isOwner) return;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.symmetric(vertical: 12),
+              decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(4)),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+              child: Row(
+                children: [
+                  const Icon(Icons.repeat_rounded,
+                      size: 16, color: Colors.grey),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Shared Post Options',
+                    style: TextStyle(
+                        color: Colors.grey.shade600,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            ListTile(
+              leading: const Icon(Icons.edit_outlined,
+                  color: Color(0xFF1976D2)),
+              title: const Text('Edit Caption'),
+              subtitle: const Text('Change the text above the shared post',
+                  style: TextStyle(fontSize: 11)),
+              onTap: () {
+                Navigator.pop(context);
+                _showEditRepostCaptionSheet(context);
+              },
+            ),
+            ListTile(
+              leading:
+                  const Icon(Icons.delete_outline, color: Colors.red),
+              title: const Text('Delete Shared Post',
+                  style: TextStyle(color: Colors.red)),
+              subtitle: const Text(
+                  'Removes your share — the original post is unaffected',
+                  style: TextStyle(fontSize: 11, color: Colors.red)),
+              onTap: () async {
+                Navigator.pop(context);
+                final confirm = await showDialog<bool>(
+                  context: context,
+                  builder: (_) => AlertDialog(
+                    title: const Text('Delete Shared Post'),
+                    content: const Text(
+                        'This will remove your share from the feed. The original post will not be affected.'),
+                    actions: [
+                      TextButton(
+                          onPressed: () => Navigator.pop(context, false),
+                          child: const Text('Cancel')),
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, true),
+                        child: const Text('Delete',
+                            style: TextStyle(color: Colors.red)),
+                      ),
+                    ],
+                  ),
+                );
+                if (confirm == true && context.mounted) {
+                  final result =
+                      await BackendService.deletePost(widget.post.id);
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                      content: Text(result.success
+                          ? 'Shared post deleted.'
+                          : result.message ?? 'Failed'),
+                      backgroundColor:
+                          result.success ? Colors.green : Colors.red,
+                      behavior: SnackBarBehavior.floating,
+                    ));
+                  }
+                }
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showEditRepostCaptionSheet(BuildContext context) {
+    final ctrl = TextEditingController(text: widget.post.content);
+    bool saving = false;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setS) => Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(ctx).viewInsets.bottom,
+            left: 20,
+            right: 20,
+            top: 20,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 14),
+                  decoration: BoxDecoration(
+                      color: Colors.grey.shade300,
+                      borderRadius: BorderRadius.circular(4)),
+                ),
+              ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Row(
+                    children: [
+                      Icon(Icons.edit_outlined,
+                          color: Color(0xFF1976D2), size: 18),
+                      SizedBox(width: 8),
+                      Text('Edit Caption',
+                          style: TextStyle(
+                              fontSize: 17, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.pop(ctx),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Edit the text above the shared post.',
+                style:
+                    TextStyle(color: Colors.grey.shade500, fontSize: 12),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: ctrl,
+                maxLines: 5,
+                minLines: 2,
+                maxLength: 500,
+                autofocus: true,
+                decoration: InputDecoration(
+                  hintText: 'Add a caption... (optional)',
+                  hintStyle: const TextStyle(color: Colors.grey),
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide:
+                          BorderSide(color: Colors.grey.shade200)),
+                  enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide:
+                          BorderSide(color: Colors.grey.shade200)),
+                  focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: const BorderSide(
+                          color: Colors.red, width: 1.5)),
+                  filled: true,
+                  fillColor: const Color(0xFFF9F9F9),
+                  counterStyle: const TextStyle(
+                      fontSize: 11, color: Colors.grey),
+                ),
+              ),
+              if (widget.post.originalPost != null) ...[
+                const SizedBox(height: 6),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF7F7F7),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFFE0E0E0)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.repeat_rounded,
+                          size: 13, color: Colors.grey),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          widget.post.originalPost!.authorName,
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 12,
+                              color: Colors.black54),
+                        ),
+                      ),
+                      Text(
+                        'Original post',
+                        style: TextStyle(
+                            fontSize: 11, color: Colors.grey.shade400),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              const SizedBox(height: 14),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: saving
+                      ? null
+                      : () async {
+                          setS(() => saving = true);
+                          final result = await BackendService.editPost(
+                            postId: widget.post.id,
+                            newContent: ctrl.text,
+                          );
+                          setS(() => saving = false);
+                          if (ctx.mounted) {
+                            Navigator.pop(ctx);
+                            ScaffoldMessenger.of(context)
+                                .showSnackBar(SnackBar(
+                              content: Text(result.success
+                                  ? 'Caption updated!'
+                                  : result.message ?? 'Failed'),
+                              backgroundColor: result.success
+                                  ? Colors.green
+                                  : Colors.red,
+                              behavior: SnackBarBehavior.floating,
+                            ));
+                          }
+                        },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red,
+                    minimumSize: const Size(double.infinity, 46),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                  ),
+                  child: saving
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                              color: Colors.white, strokeWidth: 2))
+                      : const Text('Save Caption',
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold)),
+                ),
+              ),
+              const SizedBox(height: 20),
+            ],
+          ),
         ),
       ),
     );
@@ -1246,22 +1773,33 @@ class _FeedPostCardState extends State<_FeedPostCard> {
         builder: (ctx, setS) => Padding(
           padding: EdgeInsets.only(
             bottom: MediaQuery.of(ctx).viewInsets.bottom,
-            left: 20, right: 20, top: 20,
+            left: 20,
+            right: 20,
+            top: 20,
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Center(child: Container(
-                width: 40, height: 4,
-                margin: const EdgeInsets.only(bottom: 14),
-                decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(4)),
-              )),
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 14),
+                  decoration: BoxDecoration(
+                      color: Colors.grey.shade300,
+                      borderRadius: BorderRadius.circular(4)),
+                ),
+              ),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('Edit Post', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
-                  IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx)),
+                  const Text('Edit Post',
+                      style: TextStyle(
+                          fontSize: 17, fontWeight: FontWeight.bold)),
+                  IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.pop(ctx)),
                 ],
               ),
               const SizedBox(height: 10),
@@ -1273,39 +1811,61 @@ class _FeedPostCardState extends State<_FeedPostCard> {
                 autofocus: true,
                 decoration: InputDecoration(
                   hintText: "Edit your post...",
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: Colors.grey.shade200)),
-                  focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: Colors.red, width: 1.5)),
-                  filled: true, fillColor: const Color(0xFFF9F9F9),
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide:
+                          BorderSide(color: Colors.grey.shade200)),
+                  focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: const BorderSide(
+                          color: Colors.red, width: 1.5)),
+                  filled: true,
+                  fillColor: const Color(0xFFF9F9F9),
                 ),
               ),
               const SizedBox(height: 10),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: saving ? null : () async {
-                    setS(() => saving = true);
-                    final result = await BackendService.editPost(
-                      postId: widget.post.id,
-                      newContent: ctrl.text,
-                    );
-                    setS(() => saving = false);
-                    if (ctx.mounted) {
-                      Navigator.pop(ctx);
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                        content: Text(result.success ? 'Post updated!' : result.message ?? 'Failed'),
-                        backgroundColor: result.success ? Colors.green : Colors.red,
-                        behavior: SnackBarBehavior.floating,
-                      ));
-                    }
-                  },
+                  onPressed: saving
+                      ? null
+                      : () async {
+                          setS(() => saving = true);
+                          final result = await BackendService.editPost(
+                            postId: widget.post.id,
+                            newContent: ctrl.text,
+                          );
+                          setS(() => saving = false);
+                          if (ctx.mounted) {
+                            Navigator.pop(ctx);
+                            ScaffoldMessenger.of(context)
+                                .showSnackBar(SnackBar(
+                              content: Text(result.success
+                                  ? 'Post updated!'
+                                  : result.message ?? 'Failed'),
+                              backgroundColor: result.success
+                                  ? Colors.green
+                                  : Colors.red,
+                              behavior: SnackBarBehavior.floating,
+                            ));
+                          }
+                        },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.red,
                     minimumSize: const Size(double.infinity, 46),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10)),
                   ),
                   child: saving
-                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                      : const Text('Save Changes', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                              color: Colors.white, strokeWidth: 2))
+                      : const Text('Save Changes',
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold)),
                 ),
               ),
               const SizedBox(height: 20),
@@ -1324,47 +1884,67 @@ class _FeedPostCardState extends State<_FeedPostCard> {
     final hasMore = comments.length > 2;
     final isRepost = post.isRepost && post.originalPost != null;
 
+    String? myUid;
+    try {
+      myUid = BackendService.currentUid;
+    } catch (_) {}
+    final isOwnPost = post.uid == myUid;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       color: Colors.white,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Repost banner (sharer label) ──────────────────────────────────
           if (isRepost) ...[
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
               child: Row(
                 children: [
-                  CircleAvatar(
-                    radius: 13,
-                    backgroundImage: post.authorLogoUrl != null
-                        ? NetworkImage(post.authorLogoUrl!) as ImageProvider
-                        : const AssetImage('assets/profile.jpg'),
+                  GestureDetector(
+                    onTap: () => _openAuthorPortfolio(context, post.uid),
+                    child: CircleAvatar(
+                      radius: 13,
+                      backgroundImage: post.authorLogoUrl != null
+                          ? NetworkImage(post.authorLogoUrl!)
+                              as ImageProvider
+                          : const AssetImage('assets/profile.jpg'),
+                    ),
                   ),
                   const SizedBox(width: 7),
-                  Text(post.authorName,
-                      style: const TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 13,
-                          color: Color(0xFF333333))),
+                  GestureDetector(
+                    onTap: () => _openAuthorPortfolio(context, post.uid),
+                    child: Text(post.authorName,
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                            color: Color(0xFF333333))),
+                  ),
                   const SizedBox(width: 5),
                   const Icon(Icons.repeat_rounded,
                       size: 13, color: Colors.grey),
                   const SizedBox(width: 4),
                   const Text('shared a post',
-                      style: TextStyle(fontSize: 12, color: Colors.grey)),
+                      style:
+                          TextStyle(fontSize: 12, color: Colors.grey)),
                   const Spacer(),
                   Text(_timeAgo(post.createdAt),
-                      style:
-                          const TextStyle(fontSize: 11, color: Colors.grey)),
+                      style: const TextStyle(
+                          fontSize: 11, color: Colors.grey)),
+                  if (isOwnPost) ...[
+                    const SizedBox(width: 6),
+                    GestureDetector(
+                      onTap: () => _showRepostOptions(context),
+                      child: const Icon(Icons.more_horiz,
+                          color: Colors.grey, size: 18),
+                    ),
+                  ],
                 ],
               ),
             ),
             const Divider(height: 1, color: Color(0xFFF0F0F0)),
           ],
 
-          // ── Sharer's caption (if any) ─────────────────────────────────────
           if (isRepost && post.content.isNotEmpty)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
@@ -1372,7 +1952,6 @@ class _FeedPostCardState extends State<_FeedPostCard> {
                   style: const TextStyle(fontSize: 14, height: 1.4)),
             ),
 
-          // ── ORIGINAL POST embedded card ────────────────────────────────────
           if (isRepost)
             _OriginalPostCard(
               original: post.originalPost!,
@@ -1381,41 +1960,55 @@ class _FeedPostCardState extends State<_FeedPostCard> {
                   _showOriginalPostPopup(context, post.originalPost!),
             ),
 
-          // ── Normal post: author row ────────────────────────────────────────
           if (!isRepost)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
               child: Row(
                 children: [
-                  CircleAvatar(
-                    radius: 20,
-                    backgroundImage: post.authorLogoUrl != null
-                        ? NetworkImage(post.authorLogoUrl!) as ImageProvider
-                        : const AssetImage('assets/profile.jpg'),
+                  GestureDetector(
+                    onTap: () =>
+                        _openAuthorPortfolio(context, post.uid),
+                    child: CircleAvatar(
+                      radius: 20,
+                      backgroundImage: post.authorLogoUrl != null
+                          ? NetworkImage(post.authorLogoUrl!)
+                              as ImageProvider
+                          : const AssetImage('assets/profile.jpg'),
+                    ),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(post.authorName,
-                            style: const TextStyle(
-                                fontWeight: FontWeight.bold, fontSize: 14)),
+                        GestureDetector(
+                          onTap: () =>
+                              _openAuthorPortfolio(context, post.uid),
+                          child: Text(post.authorName,
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                  decoration: TextDecoration.none)),
+                        ),
                         Text(_timeAgo(post.createdAt),
                             style: const TextStyle(
                                 color: Colors.grey, fontSize: 11)),
                       ],
                     ),
                   ),
+                  if (!isOwnPost) ...[
+                    _ConnectButton(targetUid: post.uid),
+                    const SizedBox(width: 8),
+                  ],
                   GestureDetector(
                     onTap: () => _showPostOptions(context),
-                    child: const Icon(Icons.more_horiz, color: Colors.grey),
+                    child: const Icon(Icons.more_horiz,
+                        color: Colors.grey),
                   ),
                 ],
               ),
             ),
 
-          // ── Normal post content ───────────────────────────────────────────
           if (!isRepost && post.content.isNotEmpty)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
@@ -1423,15 +2016,19 @@ class _FeedPostCardState extends State<_FeedPostCard> {
                   style: const TextStyle(fontSize: 14, height: 1.4)),
             ),
 
-          // ── Normal post image ──────────────────────────────────────────────
           if (!isRepost && post.imageUrl != null)
             Padding(
               padding: const EdgeInsets.only(top: 10),
-              child: Image.network(post.imageUrl!,
-                  fit: BoxFit.cover, width: double.infinity, height: 220),
+              child: GestureDetector(
+                onTap: () =>
+                    _openFullScreenImage(context, post.imageUrl!),
+                child: Image.network(post.imageUrl!,
+                    fit: BoxFit.cover,
+                    width: double.infinity,
+                    height: 220),
+              ),
             ),
 
-          // ── Like + comment count row ──────────────────────────────────────
           if (_likesCount > 0 || comments.isNotEmpty)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
@@ -1445,7 +2042,8 @@ class _FeedPostCardState extends State<_FeedPostCard> {
                           Container(
                             padding: const EdgeInsets.all(3),
                             decoration: const BoxDecoration(
-                                color: Colors.red, shape: BoxShape.circle),
+                                color: Colors.red,
+                                shape: BoxShape.circle),
                             child: const Icon(Icons.thumb_up,
                                 size: 10, color: Colors.white),
                           ),
@@ -1477,14 +2075,15 @@ class _FeedPostCardState extends State<_FeedPostCard> {
           const SizedBox(height: 8),
           const Divider(height: 1, color: Color(0xFFEEEEEE)),
 
-          // ── Action buttons ────────────────────────────────────────────────
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 2),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
                 _actionBtn(
-                  icon: _liked ? Icons.thumb_up : Icons.thumb_up_outlined,
+                  icon: _liked
+                      ? Icons.thumb_up
+                      : Icons.thumb_up_outlined,
                   label: 'Like',
                   color: _liked ? Colors.red : Colors.grey,
                   onTap: _toggleLike,
@@ -1506,7 +2105,6 @@ class _FeedPostCardState extends State<_FeedPostCard> {
             ),
           ),
 
-          // ── Inline comments ───────────────────────────────────────────────
           if (_showComments) ...[
             const Divider(height: 1, color: Color(0xFFEEEEEE)),
             Padding(
@@ -1519,7 +2117,8 @@ class _FeedPostCardState extends State<_FeedPostCard> {
                     GestureDetector(
                       onTap: () => _showAllCommentsPopup(context),
                       child: Padding(
-                        padding: const EdgeInsets.only(bottom: 8, left: 4),
+                        padding:
+                            const EdgeInsets.only(bottom: 8, left: 4),
                         child: Text(
                           'See all ${comments.length} comments',
                           style: const TextStyle(
@@ -1548,11 +2147,17 @@ class _FeedPostCardState extends State<_FeedPostCard> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const CircleAvatar(radius: 14, backgroundImage: AssetImage('assets/profile.jpg')),
+          CircleAvatar(
+            radius: 14,
+            backgroundImage: c.authorLogoUrl != null
+                ? NetworkImage(c.authorLogoUrl!) as ImageProvider
+                : const AssetImage('assets/profile.jpg'),
+          ),
           const SizedBox(width: 8),
           Expanded(
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
                   color: const Color(0xFFF3F3F3),
                   borderRadius: BorderRadius.circular(14)),
@@ -1561,17 +2166,22 @@ class _FeedPostCardState extends State<_FeedPostCard> {
                 children: [
                   Row(
                     children: [
-                      Expanded(child: Text(c.authorName,
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                      Expanded(
+                          child: Text(c.authorName,
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12))),
                       if (isOwner)
                         GestureDetector(
                           onTap: () => _showCommentOptions(c),
-                          child: const Icon(Icons.more_horiz, size: 16, color: Colors.grey),
+                          child: const Icon(Icons.more_horiz,
+                              size: 16, color: Colors.grey),
                         ),
                     ],
                   ),
                   const SizedBox(height: 2),
-                  Text(c.content, style: const TextStyle(fontSize: 13)),
+                  Text(c.content,
+                      style: const TextStyle(fontSize: 13)),
                 ],
               ),
             ),
@@ -1586,30 +2196,45 @@ class _FeedPostCardState extends State<_FeedPostCard> {
       context: context,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+          borderRadius:
+              BorderRadius.vertical(top: Radius.circular(16))),
       builder: (_) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(width: 40, height: 4,
+            Container(
+              width: 40,
+              height: 4,
               margin: const EdgeInsets.symmetric(vertical: 12),
-              decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(4))),
-            ListTile(
-              leading: const Icon(Icons.edit_outlined, color: Color(0xFF1976D2)),
-              title: const Text('Edit Comment'),
-              onTap: () { Navigator.pop(context); _showEditCommentDialog(c); },
+              decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(4)),
             ),
             ListTile(
-              leading: const Icon(Icons.delete_outline, color: Colors.red),
-              title: const Text('Delete Comment', style: TextStyle(color: Colors.red)),
+              leading: const Icon(Icons.edit_outlined,
+                  color: Color(0xFF1976D2)),
+              title: const Text('Edit Comment'),
+              onTap: () {
+                Navigator.pop(context);
+                _showEditCommentDialog(c);
+              },
+            ),
+            ListTile(
+              leading:
+                  const Icon(Icons.delete_outline, color: Colors.red),
+              title: const Text('Delete Comment',
+                  style: TextStyle(color: Colors.red)),
               onTap: () async {
                 Navigator.pop(context);
                 final result = await BackendService.deleteComment(
                     postId: widget.post.id, commentId: c.id);
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                    content: Text(result.success ? 'Comment deleted.' : result.message ?? 'Failed'),
-                    backgroundColor: result.success ? Colors.green : Colors.red,
+                    content: Text(result.success
+                        ? 'Comment deleted.'
+                        : result.message ?? 'Failed'),
+                    backgroundColor:
+                        result.success ? Colors.green : Colors.red,
                     behavior: SnackBarBehavior.floating,
                   ));
                 }
@@ -1634,16 +2259,21 @@ class _FeedPostCardState extends State<_FeedPostCard> {
           minLines: 2,
           decoration: InputDecoration(
             hintText: 'Edit your comment...',
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+            border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10)),
             focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(color: Colors.red)),
+                borderSide:
+                    const BorderSide(color: Colors.red)),
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel')),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red),
             onPressed: () async {
               final result = await BackendService.editComment(
                 postId: widget.post.id,
@@ -1653,13 +2283,17 @@ class _FeedPostCardState extends State<_FeedPostCard> {
               if (ctx.mounted) {
                 Navigator.pop(ctx);
                 ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                  content: Text(result.success ? 'Comment updated!' : result.message ?? 'Failed'),
-                  backgroundColor: result.success ? Colors.green : Colors.red,
+                  content: Text(result.success
+                      ? 'Comment updated!'
+                      : result.message ?? 'Failed'),
+                  backgroundColor:
+                      result.success ? Colors.green : Colors.red,
                   behavior: SnackBarBehavior.floating,
                 ));
               }
             },
-            child: const Text('Save', style: TextStyle(color: Colors.white)),
+            child: const Text('Save',
+                style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -1680,15 +2314,16 @@ class _FeedPostCardState extends State<_FeedPostCard> {
               hintText: 'Write a comment...',
               hintStyle:
                   const TextStyle(fontSize: 12, color: Colors.grey),
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 14, vertical: 8),
               border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(20),
                   borderSide: BorderSide.none),
               filled: true,
               fillColor: const Color(0xFFF3F3F3),
               suffixIcon: IconButton(
-                icon: const Icon(Icons.send, color: Colors.red, size: 16),
+                icon: const Icon(Icons.send,
+                    color: Colors.red, size: 16),
                 onPressed: _submitComment,
               ),
             ),
@@ -1709,7 +2344,8 @@ class _FeedPostCardState extends State<_FeedPostCard> {
       onTap: onTap,
       borderRadius: BorderRadius.circular(8),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        padding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         child: Row(
           children: [
             Icon(icon, size: 17, color: color),
@@ -1725,8 +2361,6 @@ class _FeedPostCardState extends State<_FeedPostCard> {
     );
   }
 }
-
-// ── ORIGINAL POST EMBEDDED CARD (inside repost) ───────────────────────────────
 
 class _OriginalPostCard extends StatelessWidget {
   final Post original;
@@ -1785,28 +2419,12 @@ class _OriginalPostCard extends StatelessWidget {
                       ],
                     ),
                   ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.red.shade50,
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: Colors.red.shade200),
-                    ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.person_add_outlined,
-                            size: 12, color: Colors.red),
-                        SizedBox(width: 3),
-                        Text('Follow',
-                            style: TextStyle(
-                                color: Colors.red,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600)),
-                      ],
-                    ),
-                  ),
+                  Builder(builder: (ctx) {
+                    String? myUid;
+                    try { myUid = BackendService.currentUid; } catch (_) {}
+                    if (original.uid == myUid) return const SizedBox.shrink();
+                    return _ConnectButton(targetUid: original.uid);
+                  }),
                 ],
               ),
             ),
@@ -1823,16 +2441,25 @@ class _OriginalPostCard extends StatelessWidget {
             if (original.imageUrl != null)
               Padding(
                 padding: const EdgeInsets.only(top: 8),
-                child: ClipRRect(
-                  borderRadius: const BorderRadius.only(
-                    bottomLeft: Radius.circular(12),
-                    bottomRight: Radius.circular(12),
+                child: GestureDetector(
+                  onTap: () => Navigator.push(
+                    ctx,
+                    MaterialPageRoute(
+                      builder: (_) => _FullScreenImagePage(
+                          imageUrl: original.imageUrl!),
+                    ),
                   ),
-                  child: Image.network(
-                    original.imageUrl!,
-                    fit: BoxFit.cover,
-                    width: double.infinity,
-                    height: 180,
+                  child: ClipRRect(
+                    borderRadius: const BorderRadius.only(
+                      bottomLeft: Radius.circular(12),
+                      bottomRight: Radius.circular(12),
+                    ),
+                    child: Image.network(
+                      original.imageUrl!,
+                      fit: BoxFit.cover,
+                      width: double.infinity,
+                      height: 180,
+                    ),
                   ),
                 ),
               )
@@ -1843,9 +2470,10 @@ class _OriginalPostCard extends StatelessWidget {
       ),
     );
   }
-}
 
-// ── ORIGINAL POST FULL POPUP ──────────────────────────────────────────────────
+  BuildContext get ctx => _storedCtx!;
+  static BuildContext? _storedCtx;
+}
 
 class _OriginalPostSheet extends StatefulWidget {
   final Post originalPost;
@@ -1954,7 +2582,6 @@ class _OriginalPostSheetState extends State<_OriginalPostSheet> {
                         ],
                       ),
                     ),
-                    // ── FOLLOW / FOLLOWING button ──────────────────────────
                     GestureDetector(
                       onTap: _followLoading ? null : _toggleFollow,
                       child: AnimatedContainer(
@@ -2016,10 +2643,19 @@ class _OriginalPostSheetState extends State<_OriginalPostSheet> {
 
                 if (post.imageUrl != null) ...[
                   const SizedBox(height: 12),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: Image.network(post.imageUrl!,
-                        fit: BoxFit.cover, width: double.infinity),
+                  GestureDetector(
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => _FullScreenImagePage(
+                            imageUrl: post.imageUrl!),
+                      ),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: Image.network(post.imageUrl!,
+                          fit: BoxFit.cover, width: double.infinity),
+                    ),
                   ),
                 ],
 
@@ -2059,8 +2695,6 @@ class _OriginalPostSheetState extends State<_OriginalPostSheet> {
     );
   }
 }
-
-// ── LIKES BOTTOM SHEET ────────────────────────────────────────────────────────
 
 class _LikesSheet extends StatefulWidget {
   final String postId;
@@ -2162,8 +2796,6 @@ class _LikesSheetState extends State<_LikesSheet> {
   }
 }
 
-// ── ALL COMMENTS BOTTOM SHEET ─────────────────────────────────────────────────
-
 class _AllCommentsSheet extends StatefulWidget {
   final Post post;
   final VoidCallback onCommentSubmitted;
@@ -2244,10 +2876,12 @@ class _AllCommentsSheetState extends State<_AllCommentsSheet> {
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const CircleAvatar(
+                            CircleAvatar(
                               radius: 16,
-                              backgroundImage:
-                                  AssetImage('assets/profile.jpg'),
+                              backgroundImage: c.authorLogoUrl != null
+                                  ? NetworkImage(c.authorLogoUrl!)
+                                      as ImageProvider
+                                  : const AssetImage('assets/profile.jpg'),
                             ),
                             const SizedBox(width: 10),
                             Expanded(
@@ -2346,8 +2980,6 @@ class _AllCommentsSheetState extends State<_AllCommentsSheet> {
     );
   }
 }
-
-// ── SHARE BOTTOM SHEET ────────────────────────────────────────────────────────
 
 class _ShareSheet extends StatefulWidget {
   final Post post;

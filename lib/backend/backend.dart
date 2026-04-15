@@ -6,9 +6,7 @@ import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:math';
-// NOTE: dart:io and firebase_storage are intentionally NOT imported.
-// All file uploads (logos, posts, chat images/files) use Cloudinary via
-// _uploadToCloudinary(), which accepts Uint8List and works on web + mobile.
+
 
 /// ========================================================
 /// GENERIC RESULT MODEL
@@ -129,8 +127,8 @@ class BusinessPin {
 // Single collection 'businesses' with status: pending | approved | rejected
 // =========================================================
 class BusinessRecord {
-  final String id;           // Firestore doc id in 'businesses'
-  final String uid;          // owner uid
+  final String id;           
+  final String uid;         
   final String name;
   final String desc;
   final String address;
@@ -140,7 +138,7 @@ class BusinessRecord {
   final String? logoUrl;
   final String? dtiDocumentUrl;
   final String? dtiFileName;
-  final String status;       // 'pending' | 'approved' | 'rejected'
+  final String status;       
   final String? rejectionReason;
   final DateTime submittedAt;
 
@@ -203,6 +201,7 @@ class PostComment {
   final String id;
   final String uid;
   final String authorName;
+  final String? authorLogoUrl; 
   final String content;
   final DateTime createdAt;
 
@@ -210,6 +209,7 @@ class PostComment {
     required this.id,
     required this.uid,
     required this.authorName,
+    this.authorLogoUrl,        
     required this.content,
     required this.createdAt,
   });
@@ -242,7 +242,7 @@ class AppNotification {
 // MESSAGING MODELS
 // =========================================================
 
-/// A single conversation between two users.
+/// single conversation between two users.
 class Conversation {
   final String id;
   final List<String> participants;
@@ -266,14 +266,14 @@ class Conversation {
     required this.unreadCount,
   });
 
-  /// The other participant's uid relative to [myUid].
+
   String otherUid(String myUid) =>
       participants.firstWhere((id) => id != myUid, orElse: () => '');
 }
 
 enum ChatMessageType { text, image, file }
 
-/// A single message inside a conversation.
+/// single message inside a conversation.
 class ChatMessage {
   final String id;
   final String senderId;
@@ -332,6 +332,28 @@ class AttendedEvent {
 
   bool get isPast =>
       date.isBefore(DateTime.now().subtract(const Duration(hours: 1)));
+}
+
+// =========================================================
+// ── CONNECTION MODEL
+// =========================================================
+class Connection {
+  final String id;
+  final String fromUid;
+  final String toUid;
+  final String status;
+  final DateTime createdAt;
+
+  Connection({
+    required this.id,
+    required this.fromUid,
+    required this.toUid,
+    required this.status,
+    required this.createdAt,
+  });
+
+  bool get isPending => status == 'pending';
+  bool get isAccepted => status == 'accepted';
 }
 
 /// ========================================================
@@ -447,7 +469,6 @@ class BackendService {
   // CHECK DUPLICATE PHONE
   // Returns true if a user with the same trimmed phone number
   // already exists in the 'users' collection.
-  // Excludes [excludeUid] so a user editing their own profile isn't blocked.
   // =========================================================
   static Future<bool> isDuplicatePhone(String phone,
       {String? excludeUid}) async {
@@ -467,8 +488,6 @@ class BackendService {
 
   // =========================================================
   // REGISTER GOOGLE USER FOR APPROVAL  (updated)
-  // Added: businessAddress, businessLat, businessLng params
-  // Now validates duplicate name and phone before writing.
   // =========================================================
   static Future<BackendResult> registerGoogleUserForApproval({
     required User googleUser,
@@ -481,13 +500,11 @@ class BackendService {
     String? businessNature,
     Uint8List? orFileBytes,
     String? orFileName,
-    // ── NEW: business location ──
     String? businessAddress,
     double? businessLat,
     double? businessLng,
   }) async {
     try {
-      // ── Duplicate name check ──
       final nameTaken = await isDuplicateName(name);
       if (nameTaken) {
         return BackendResult(
@@ -497,7 +514,7 @@ class BackendService {
         );
       }
 
-      // ── Duplicate phone check (only when a phone is supplied) ──
+      // Duplicate phone check 
       if (phone != null && phone.trim().isNotEmpty) {
         final phoneTaken = await isDuplicatePhone(phone.trim());
         if (phoneTaken) {
@@ -516,7 +533,6 @@ class BackendService {
         );
         await googleUser.linkWithCredential(emailCred);
       } catch (e) {
-        // Proceed even if linking fails
       }
 
       String? orUrl;
@@ -562,33 +578,9 @@ class BackendService {
   // FORGOT PASSWORD — SEND VERIFICATION CODE
   // Generates a 6-digit code, stores it in 'password_reset_codes'
   // with a 15-minute expiry, then emails it to the user via EmailJS.
-  //
-  // EMAILJS SETUP (one-time):
-  //   1. Create a free account at https://emailjs.com
-  //   2. Add an Email Service (e.g. Gmail) → note the Service ID
-  //   3. Create an Email Template with variables:
-  //        {{to_email}}  — recipient address
-  //        {{code}}      — the 6-digit code
-  //        {{user_name}} — recipient's name (or "there" as fallback)
-  //      Example body: "Your CBOC verification code is: {{code}}
-  //                     It expires in 15 minutes."
-  //   4. Note your Template ID and Public Key (Account → API Keys)
-  //   5. Fill in the three _emailjs* constants below.
-  //
-  // HOW IT WORKS:
-  //   1. Verify the email exists and belongs to a registered user.
-  //   2. Generate a random 6-digit code.
-  //   3. Store code + expiry in 'password_reset_codes/{email}'.
-  //   4. POST to EmailJS REST API → user receives an email with the code.
-  //   5. Return success so the UI can show the code-entry screen.
-  //
-  // NOTE: The old _auth.sendPasswordResetEmail() call has been removed.
-  //       That Firebase built-in only sends a reset *link*, not our custom
-  //       6-digit code, which was causing user confusion. EmailJS now
-  //       handles all email delivery for this flow.
   // =========================================================
 
-  // ── EmailJS credentials ───────────────────────────────────
+  //  EmailJS credentials 
   static const _emailjsServiceId  = 'service_dfb1835';
   static const _emailjsTemplateId = 'template_qe2gqvu';
   static const _emailjsPublicKey  = 'Sm_5u-6PRZpRkGD-u';
@@ -597,32 +589,29 @@ class BackendService {
     try {
       final trimmedEmail = email.trim().toLowerCase();
 
-      // ── 1. Check that the email belongs to a registered user ──
+      // Check if the email belongs to a registered user 
       final snap = await _firestore
           .collection('users')
           .where('email', isEqualTo: trimmedEmail)
           .limit(1)
           .get();
 
-      // Always return the same generic message to avoid email enumeration.
-      // We still skip sending if the email is unknown (nothing to send to).
+      // still skip sending if the email is unknown (nothing to send to).
       if (snap.docs.isEmpty) {
         return BackendResult(
           success: true,
           message:
-              'If that email is registered, a verification code has been sent.',
+              'If the email is registered, a verification code has been sent.',
         );
       }
-
-      // Grab the user's name for a friendlier email greeting
       final userName =
           snap.docs.first.data()['name'] as String? ?? 'there';
 
-      // ── 2. Generate a 6-digit code ──
+      // Generate a 6-digit code 
       final code = (100000 + Random().nextInt(900000)).toString();
       final expiry = DateTime.now().add(const Duration(minutes: 15));
 
-      // ── 3. Persist code to Firestore ──
+      // Persist code to Firestore 
       await _firestore
           .collection('password_reset_codes')
           .doc(trimmedEmail)
@@ -633,11 +622,7 @@ class BackendService {
         'createdAt': FieldValue.serverTimestamp(),
       });
 
-      // ── 4. Send the code via EmailJS REST API ──
-      // EmailJS is used here because Firebase Auth's built-in
-      // sendPasswordResetEmail() only delivers a reset *link*, not a
-      // custom numeric code. EmailJS lets us inject the code directly
-      // into a template and send it from the client without a backend.
+      // Send the code via EmailJS REST API 
       final emailjsUrl =
           Uri.parse('https://api.emailjs.com/api/v1.0/email/send');
 
@@ -645,7 +630,7 @@ class BackendService {
         emailjsUrl,
         headers: {
           'Content-Type': 'application/json',
-          'origin': 'http://localhost', // required by EmailJS REST API
+          'origin': 'http://localhost', 
         },
         body: json.encode({
           'service_id':  _emailjsServiceId,
@@ -660,7 +645,6 @@ class BackendService {
       );
 
       if (emailResponse.statusCode != 200) {
-        // Log for debugging but don't expose internal details to the user
         debugPrint(
           '[BackendService] EmailJS error ${emailResponse.statusCode}: '
           '${emailResponse.body}',
@@ -688,13 +672,6 @@ class BackendService {
   // =========================================================
   // FORGOT PASSWORD — VERIFY CODE
   // Checks the submitted 6-digit code against the stored value
-  // in 'password_reset_codes/{email}'.
-  // Returns success: true only when:
-  //   • The document exists
-  //   • The code matches (case-insensitive trim)
-  //   • The code has not expired (expiresAt > now)
-  //   • The code has not already been used
-  // Does NOT mark the code as used here — that happens in
   // resetPasswordWithCode() after the new password is saved.
   // =========================================================
   static Future<BackendResult> verifyPasswordResetCode({
@@ -743,32 +720,6 @@ class BackendService {
   // =========================================================
   // FORGOT PASSWORD — RESET WITH VERIFIED CODE
   // Called after verifyPasswordResetCode returns success.
-  // Steps:
-  //   1. Re-verify the code is still valid (guard against race conditions).
-  //   2. Sign in silently to obtain a fresh Firebase Auth token.
-  //      Because the user is not logged in, we use the stored email to
-  //      look up their uid, then use Admin SDK via a Cloud Function OR
-  //      re-sign-in via the temporary token approach.
-  //
-  // IMPLEMENTATION NOTE:
-  //   Firebase Auth does not allow client-side password change without
-  //   re-authentication. The cleanest client-safe approach is:
-  //     a. Send a standard Firebase password-reset email (link).
-  //     b. After code verification, call confirmPasswordReset(oobCode, newPw)
-  //        — but oobCode comes from the email link, not from our custom code.
-  //
-  //   Since we are using a CUSTOM code flow (not the Firebase link flow),
-  //   the recommended pattern is to handle the actual password update in a
-  //   Cloud Function triggered by writing the new (bcrypt-hashed or plain)
-  //   password to a secure Firestore sub-document.
-  //
-  //   For THIS implementation we write the new password + verified flag to
-  //   'password_reset_codes/{email}' and expect a server-side Cloud Function
-  //   (updatePasswordOnVerified) to pick it up, call admin.auth().updateUser(),
-  //   then delete the document.
-  //
-  //   If you have no Cloud Function yet, replace the Firestore write below
-  //   with a direct HTTPS callable function call.
   // =========================================================
   static Future<BackendResult> resetPasswordWithCode({
     required String email,
@@ -776,7 +727,6 @@ class BackendService {
     required String newPassword,
   }) async {
     try {
-      // ── Re-verify before committing ──
       final verify = await verifyPasswordResetCode(email: email, code: code);
       if (!verify.success) return verify;
 
@@ -787,17 +737,12 @@ class BackendService {
       }
 
       final trimmedEmail = email.trim().toLowerCase();
-
-      // ── Mark code as used + store new password for Cloud Function ──
-      // The Cloud Function 'updatePasswordOnVerified' watches this doc,
-      // calls admin.auth().updateUser({ password: newPassword }), then
-      // deletes the document.
       await _firestore
           .collection('password_reset_codes')
           .doc(trimmedEmail)
           .update({
         'used': true,
-        'newPassword': newPassword.trim(), // Cloud Function reads & deletes this
+        'newPassword': newPassword.trim(),
         'resetAt': FieldValue.serverTimestamp(),
       });
 
@@ -939,7 +884,6 @@ class BackendService {
         'cancelReason': reason.trim(),
         'cancelRequestedAt': FieldValue.serverTimestamp(),
       });
-      // Notify admin via user_notifications to avoid needing admin_notifications
       await _firestore.collection('user_notifications').add({
         'type': 'cancel_request',
         'eventId': eventId,
@@ -1179,7 +1123,6 @@ class BackendService {
             success: false, message: 'Already attending this event');
       }
 
-      // Clamp plus-one to 0 or 1, consume slots accordingly
       final guests = plusOne.clamp(0, 1);
       final slotsNeeded = 1 + guests;
       if (upcomingEvent.availableSlots < slotsNeeded) {
@@ -1209,8 +1152,6 @@ class BackendService {
 
   // =========================================================
   // CHECK EVENT CONFLICTS
-  // Returns titles of approved events on the same date that
-  // overlap with the given time window.
   // =========================================================
   static Future<List<String>> checkEventConflicts({
     required DateTime date,
@@ -1232,7 +1173,6 @@ class BackendService {
       final d = doc.data();
       final eStart = (d['startHour'] as int) * 60 + (d['startMinute'] as int);
       final eEnd = (d['endHour'] as int) * 60 + (d['endMinute'] as int);
-      // Overlap: new event starts before existing ends AND ends after existing starts
       if (startMins < eEnd && endMins > eStart) {
         conflicts.add(d['title'] as String? ?? 'Unnamed event');
       }
@@ -1291,6 +1231,19 @@ class BackendService {
     return doc.data()!;
   }
 
+  // =========================================================
+  // FETCH ANY USER'S PUBLIC PROFILE BY UID
+  // =========================================================
+  static Future<Map<String, dynamic>?> fetchPublicProfile(String uid) async {
+    try {
+      final doc = await _firestore.collection('users').doc(uid).get();
+      if (!doc.exists) return null;
+      return {...doc.data()!, 'uid': uid};
+    } catch (e) {
+      return null;
+    }
+  }
+
   static Future<BackendResult> saveUserProfile({
     required String name,
     required String phone,
@@ -1301,7 +1254,6 @@ class BackendService {
       final user = _auth.currentUser;
       if (user == null) throw Exception('User not logged in');
 
-      // ── Duplicate name check (exclude current user) ──
       final nameTaken = await isDuplicateName(name, excludeUid: user.uid);
       if (nameTaken) {
         return BackendResult(
@@ -1311,7 +1263,6 @@ class BackendService {
         );
       }
 
-      // ── Duplicate phone check (exclude current user) ──
       if (phone.trim().isNotEmpty) {
         final phoneTaken =
             await isDuplicatePhone(phone.trim(), excludeUid: user.uid);
@@ -1338,10 +1289,7 @@ class BackendService {
   }
 
   // =========================================================
-  // UPLOAD PROFILE PICTURE
-  // Uploads to Cloudinary and saves the URL to the user's Firestore
-  // doc as 'logoUrl'. Also updates all existing conversations so
-  // the new avatar is reflected immediately in the chat list.
+  // UPLOAD PROFILE PICTURE using claudinary
   // =========================================================
   static Future<BackendResult> uploadAndSaveProfilePicture(
       Uint8List bytes, String fileName) async {
@@ -1356,14 +1304,11 @@ class BackendService {
         resourceType: 'image',
       );
 
-      // Save to user doc
       await _firestore.collection('users').doc(user.uid).set(
         {'logoUrl': url, 'updatedAt': FieldValue.serverTimestamp()},
         SetOptions(merge: true),
       );
 
-      // Update all conversations this user is part of so the avatar
-      // refreshes for the other participants immediately.
       final convsSnap = await _firestore
           .collection('conversations')
           .where('participants', arrayContains: user.uid)
@@ -1387,8 +1332,6 @@ class BackendService {
 
   // =========================================================
   // FETCH NEWEST MEMBERS
-  // Returns the [limit] most recently created, approved users
-  // (excluding the current user). Used in the "New on CBOC" section.
   // =========================================================
   static Future<List<Map<String, dynamic>>> fetchNewestMembers(
       {int limit = 3}) async {
@@ -1398,7 +1341,7 @@ class BackendService {
           .collection('users')
           .where('approved', isEqualTo: true)
           .orderBy('createdAt', descending: true)
-          .limit(limit + 1) // fetch one extra so we can exclude self
+          .limit(limit + 1) 
           .get();
 
       final results = snap.docs
@@ -1415,9 +1358,6 @@ class BackendService {
 
   // =========================================================
   // SUBMIT BUSINESS
-  // Stored directly in 'businesses' collection with status: 'pending'.
-  // Admin approves → status becomes 'approved'.
-  // No data is duplicated or moved; same doc, status field changes.
   // =========================================================
   static Future<BackendResult> submitBusiness({
     required String name,
@@ -1434,7 +1374,6 @@ class BackendService {
       final user = _auth.currentUser;
       if (user == null) throw Exception('User not logged in');
 
-      // Upload DTI document to Cloudinary
       String dtiUrl;
       try {
         dtiUrl = await _uploadToCloudinary(
@@ -1453,7 +1392,6 @@ class BackendService {
           await _firestore.collection('users').doc(user.uid).get();
       final userName = userDoc.data()?['name'] as String? ?? 'Unknown';
 
-      // Write directly to 'businesses' collection with status: pending
       final docRef = await _firestore.collection('businesses').add({
         'uid': user.uid,
         'userName': userName,
@@ -1470,8 +1408,6 @@ class BackendService {
         'submittedAt': FieldValue.serverTimestamp(),
       });
 
-      // Notify admin (reuse user_notifications with isAdminNotif flag
-      // to avoid needing a separate admin_notifications collection)
       await _firestore.collection('user_notifications').add({
         'type': 'business_approval_request',
         'businessId': docRef.id,
@@ -1491,8 +1427,6 @@ class BackendService {
 
   // =========================================================
   // MY BUSINESSES STREAM
-  // Returns ALL businesses for the current user from the single
-  // 'businesses' collection, regardless of status.
   // =========================================================
   static Stream<List<BusinessRecord>> myBusinessesStream() {
     final uid = _auth.currentUser?.uid;
@@ -1529,7 +1463,6 @@ class BackendService {
 
   // =========================================================
   // ADMIN: APPROVE BUSINESS
-  // Just flips status to 'approved' in the same doc. No data moved.
   // =========================================================
   static Future<BackendResult> adminApproveBusiness(
       String businessId) async {
@@ -1545,17 +1478,15 @@ class BackendService {
         return BackendResult(success: false, message: 'Owner UID missing');
       }
 
-      // Simply update status — same doc, no duplication
       await _firestore.collection('businesses').doc(businessId).update({
         'status': 'approved',
         'approvedAt': FieldValue.serverTimestamp(),
       });
 
-      // Notify the business owner
       await _firestore.collection('user_notifications').add({
         'uid': ownerUid,
         'type': 'business_approved',
-        'title': 'Business Approved! 🎉',
+        'title': 'Business Approved!',
         'body':
             '"${data['name']}" has been approved and is now visible on the map.',
         'businessId': businessId,
@@ -1571,7 +1502,6 @@ class BackendService {
 
   // =========================================================
   // ADMIN: REJECT BUSINESS
-  // Just flips status to 'rejected' with a reason. No data moved.
   // =========================================================
   static Future<BackendResult> adminRejectBusiness(
       String businessId, String reason) async {
@@ -1804,10 +1734,24 @@ class BackendService {
       final following =
           List<String>.from(followDoc.data()?['following'] ?? []);
       final allowed = {...following, uid};
+
+      final connectionsSnap = await _firestore
+          .collection('connections')
+          .where('status', isEqualTo: 'accepted')
+          .get();
+      for (final conn in connectionsSnap.docs) {
+        final d = conn.data();
+        final from = d['fromUid'] as String?;
+        final to = d['toUid'] as String?;
+        if (from == uid && to != null) allowed.add(to);
+        if (to == uid && from != null) allowed.add(from);
+      }
+
       final posts = <Post>[];
       for (final doc in snapshot.docs) {
         final d = doc.data();
         if (!allowed.contains(d['uid'])) continue;
+
         final commentsSnap = await doc.reference
             .collection('comments')
             .orderBy('createdAt')
@@ -1818,11 +1762,13 @@ class BackendService {
             id: c.id,
             uid: cd['uid'],
             authorName: cd['authorName'],
+            authorLogoUrl: cd['authorLogoUrl'] as String?, 
             content: cd['content'],
             createdAt:
                 (cd['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
           );
         }).toList();
+
         Post? originalPost;
         if (d['isRepost'] == true && d['originalPostId'] != null) {
           originalPost = Post(
@@ -1897,6 +1843,7 @@ class BackendService {
       }
       final profile = await fetchUserProfile();
       final name = profile?['name'] ?? 'User';
+      final logoUrl = profile?['logoUrl']; 
       await _firestore
           .collection('posts')
           .doc(postId)
@@ -1904,6 +1851,7 @@ class BackendService {
           .add({
         'uid': uid,
         'authorName': name,
+        'authorLogoUrl': logoUrl, 
         'content': content.trim(),
         'createdAt': FieldValue.serverTimestamp(),
       });
@@ -2077,20 +2025,15 @@ class BackendService {
 
   // =========================================================
   // FOLLOW / UNFOLLOW
-  // After any follow/unfollow action, recalculates mutual status
-  // and updates every shared conversation document so the
-  // isMutual badge refreshes in real-time for both users.
   // =========================================================
   static Future<void> followUser(String targetUid) async {
     final uid = _auth.currentUser?.uid;
     if (uid == null) return;
 
-    // 1. Write to follows collection
     await _firestore.collection('follows').doc(uid).set({
       'following': FieldValue.arrayUnion([targetUid]),
     }, SetOptions(merge: true));
 
-    // 2. Recalculate mutual status and patch shared conversations
     await _updateMutualStatusForPair(uid, targetUid);
   }
 
@@ -2098,22 +2041,17 @@ class BackendService {
     final uid = _auth.currentUser?.uid;
     if (uid == null) return;
 
-    // 1. Remove from follows collection
     await _firestore.collection('follows').doc(uid).set({
       'following': FieldValue.arrayRemove([targetUid]),
     }, SetOptions(merge: true));
 
-    // 2. Recalculate mutual status and patch shared conversations
     await _updateMutualStatusForPair(uid, targetUid);
   }
 
-  /// Checks whether uid1 and uid2 follow each other and updates
-  /// isMutual on every conversation that contains both of them.
   static Future<void> _updateMutualStatusForPair(
       String uid1, String uid2) async {
     final mutual = await areMutual(uid1, uid2);
 
-    // Find all conversations that contain uid1
     final snap = await _firestore
         .collection('conversations')
         .where('participants', arrayContains: uid1)
@@ -2194,7 +2132,7 @@ class BackendService {
       if (user == null) throw Exception('Not logged in');
       final profile = await fetchUserProfile();
       final name = profile?['name'] ?? 'User';
-      final logoUrl = profile?['logoUrl'];
+      final logoUrl = profile?['logoUrl']; 
       await _firestore.collection('posts').add({
         'uid': user.uid,
         'authorName': name,
@@ -2328,7 +2266,7 @@ class BackendService {
   }
 
   // =========================================================
-  // ── MESSAGING ─────────────────────────────────────────────
+  // MESSAGING 
   // =========================================================
 
   static String get currentUid {
@@ -2653,21 +2591,6 @@ class BackendService {
   // =========================================================
   // FETCH QR CODE URL
   // =========================================================
-  // Reads the Firebase Storage QR image URL stored in
-  // users/{uid}.qrCodeURL.
-  //
-  // This field is written automatically by qr_generator.js (web side)
-  // the first time the user's portfolio page (check_portfolio.php)
-  // is loaded after admin approval. The QR encodes the URL:
-  //   https://cavitebusinessownersclub.infinityfree.me/
-  //   smartdigital-admin-capstone/Admin/check_portfolio.php?uid=<uid>
-  //
-  // Returns null if:
-  //   • The user is not logged in
-  //   • The document does not exist
-  //   • qrCodeURL has not been generated yet — user needs to visit
-  //     their portfolio link at least once after being approved.
-  // =========================================================
   static Future<String?> fetchQRCodeURL() async {
     try {
       final user = _auth.currentUser;
@@ -2678,8 +2601,6 @@ class BackendService {
 
       if (!docSnap.exists) return null;
 
-      // qrCodeURL is set by qr_generator.js after Firebase Storage upload.
-      // It is a permanent Firebase Storage download URL.
       return docSnap.data()?['qrCodeURL'] as String?;
     } catch (e) {
       debugPrint('[BackendService] fetchQRCodeURL error: $e');
@@ -2689,8 +2610,6 @@ class BackendService {
 
   // =========================================================
   // GENERATE AND SAVE QR CODE
-  // Mirrors qr_generator.js logic — calls qrserver.com API,
-  // uploads the PNG to Cloudinary, saves URL to Firestore.
   // =========================================================
   static Future<String?> generateAndSaveQR() async {
     try {
@@ -2702,7 +2621,6 @@ class BackendService {
           '/smartdigital-admin-capstone/Admin/check_portfolio.php';
       final portfolioURL = '$portfolioBase?uid=${user.uid}';
 
-      // 1. Fetch QR PNG from qrserver.com (same API as qr_generator.js)
       final qrApiUrl = Uri.parse(
         'https://api.qrserver.com/v1/create-qr-code/'
         '?size=300x300'
@@ -2715,7 +2633,6 @@ class BackendService {
         throw Exception('QR API error: ${response.statusCode}');
       }
 
-      // 2. Upload PNG bytes to Cloudinary
       final fileName = 'qr_${user.uid}.png';
       final downloadURL = await _uploadToCloudinary(
         response.bodyBytes,
@@ -2724,7 +2641,6 @@ class BackendService {
         resourceType: 'image',
       );
 
-      // 3. Save URL to Firestore (same field qr_generator.js writes)
       await _firestore.collection('users').doc(user.uid).update({
         'qrCodeURL': downloadURL,
         'qrCodeGeneratedAt': FieldValue.serverTimestamp(),
@@ -2739,8 +2655,6 @@ class BackendService {
 
   // =========================================================
   // FETCH PORTFOLIO URL
-  // Returns the portfolio page URL for the current user.
-  // This is the same URL encoded in the QR code.
   // =========================================================
   static Future<String?> fetchPortfolioURL() async {
     try {
@@ -2754,4 +2668,237 @@ class BackendService {
       return null;
     }
   }
+
+  // =========================================================
+  // CONNECTIONS 
+  // ========================================================
+  static Future<BackendResult> sendConnectionRequest(String targetUid) async {
+    try {
+      final uid = _auth.currentUser?.uid;
+      if (uid == null) throw Exception('Not logged in');
+      if (uid == targetUid) {
+        return BackendResult(success: false, message: 'Cannot connect with yourself.');
+      }
+
+      final existing = await _getConnectionDoc(uid, targetUid);
+      if (existing != null) {
+        return BackendResult(
+          success: false,
+          message: existing['status'] == 'accepted'
+              ? 'Already connected.'
+              : 'Connection request already sent.',
+        );
+      }
+
+      await _firestore.collection('connections').add({
+        'fromUid': uid,
+        'toUid': targetUid,
+        'status': 'pending',
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+
+      final senderDoc = await _firestore.collection('users').doc(uid).get();
+      final senderName = senderDoc.data()?['name'] as String? ?? 'A member';
+      await _firestore.collection('user_notifications').add({
+        'uid': targetUid,
+        'type': 'connection_request',
+        'title': 'New Connection Request',
+        'body': '$senderName wants to connect with you.',
+        'fromUid': uid,
+        'read': false,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      return BackendResult(success: true, message: 'Connection request sent.');
+    } catch (e) {
+      return BackendResult(success: false, message: e.toString());
+    }
+  }
+
+  static Future<BackendResult> acceptConnectionRequest(String connectionId) async {
+    try {
+      final uid = _auth.currentUser?.uid;
+      if (uid == null) throw Exception('Not logged in');
+
+      final doc = await _firestore.collection('connections').doc(connectionId).get();
+      if (!doc.exists) {
+        return BackendResult(success: false, message: 'Connection not found.');
+      }
+      final data = doc.data()!;
+      if (data['toUid'] != uid) {
+        return BackendResult(success: false, message: 'Unauthorized.');
+      }
+
+      await _firestore.collection('connections').doc(connectionId).update({
+        'status': 'accepted',
+        'acceptedAt': FieldValue.serverTimestamp(),
+      });
+
+      final acceptorDoc = await _firestore.collection('users').doc(uid).get();
+      final acceptorName = acceptorDoc.data()?['name'] as String? ?? 'A member';
+      await _firestore.collection('user_notifications').add({
+        'uid': data['fromUid'],
+        'type': 'connection_accepted',
+        'title': 'Connection Accepted',
+        'body': '$acceptorName accepted your connection request.',
+        'fromUid': uid,
+        'read': false,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      return BackendResult(success: true, message: 'Connected!');
+    } catch (e) {
+      return BackendResult(success: false, message: e.toString());
+    }
+  }
+
+  static Future<BackendResult> removeConnection(String targetUid) async {
+    try {
+      final uid = _auth.currentUser?.uid;
+      if (uid == null) throw Exception('Not logged in');
+
+      final doc = await _getConnectionDoc(uid, targetUid);
+      if (doc == null) {
+        return BackendResult(success: false, message: 'No connection found.');
+      }
+
+      await _firestore.collection('connections').doc(doc['id']).delete();
+      return BackendResult(success: true, message: 'Connection removed.');
+    } catch (e) {
+      return BackendResult(success: false, message: e.toString());
+    }
+  }
+
+  static Future<String> getConnectionStatus(String targetUid) async {
+    try {
+      final uid = _auth.currentUser?.uid;
+      if (uid == null) return 'none';
+
+      final doc = await _getConnectionDoc(uid, targetUid);
+      if (doc == null) return 'none';
+
+      final status = doc['status'] as String;
+      if (status == 'accepted') return 'accepted';
+      if (doc['fromUid'] == uid) return 'pending_sent';
+      return 'pending_received';
+    } catch (e) {
+      return 'none';
+    }
+  }
+
+  static Future<Map<String, dynamic>?> _getConnectionDoc(
+      String uid1, String uid2) async {
+    // Check uid1 → uid2
+    final snap1 = await _firestore
+        .collection('connections')
+        .where('fromUid', isEqualTo: uid1)
+        .where('toUid', isEqualTo: uid2)
+        .limit(1)
+        .get();
+    if (snap1.docs.isNotEmpty) {
+      return {...snap1.docs.first.data(), 'id': snap1.docs.first.id};
+    }
+
+    final snap2 = await _firestore
+        .collection('connections')
+        .where('fromUid', isEqualTo: uid2)
+        .where('toUid', isEqualTo: uid1)
+        .limit(1)
+        .get();
+    if (snap2.docs.isNotEmpty) {
+      return {...snap2.docs.first.data(), 'id': snap2.docs.first.id};
+    }
+
+    return null;
+  }
+
+  static Stream<List<Map<String, dynamic>>> myConnectionsStream() {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) return Stream.value([]);
+
+    return _firestore
+        .collection('connections')
+        .where('status', isEqualTo: 'accepted')
+        .snapshots()
+        .asyncMap((snap) async {
+      final List<Map<String, dynamic>> connections = [];
+      for (final doc in snap.docs) {
+        final d = doc.data();
+        final fromUid = d['fromUid'] as String;
+        final toUid = d['toUid'] as String;
+
+        String? otherUid;
+        if (fromUid == uid) {
+          otherUid = toUid;
+        } else if (toUid == uid) {
+          otherUid = fromUid;
+        }
+        if (otherUid == null) continue;
+
+        final userDoc =
+            await _firestore.collection('users').doc(otherUid).get();
+        if (!userDoc.exists) continue;
+        connections.add({
+          ...userDoc.data()!,
+          'uid': otherUid,
+          'connectionId': doc.id,
+          'connectedAt': d['acceptedAt'],
+        });
+      }
+      return connections;
+    });
+  }
+
+  static Future<int> fetchConnectionCount() async {
+    try {
+      final uid = _auth.currentUser?.uid;
+      if (uid == null) return 0;
+
+      final snap1 = await _firestore
+          .collection('connections')
+          .where('fromUid', isEqualTo: uid)
+          .where('status', isEqualTo: 'accepted')
+          .get();
+
+      final snap2 = await _firestore
+          .collection('connections')
+          .where('toUid', isEqualTo: uid)
+          .where('status', isEqualTo: 'accepted')
+          .get();
+
+      final ids = <String>{};
+      for (final d in snap1.docs) ids.add(d.id);
+      for (final d in snap2.docs) ids.add(d.id);
+      return ids.length;
+    } catch (e) {
+      return 0;
+    }
+  }
+
+  // =========================================================
+  // GET CONNECTION DOC FOR ACCEPT
+  // =========================================================
+  static Future<Map<String, dynamic>?> getConnectionDocForAccept(
+      String senderUid) async {
+    try {
+      final uid = _auth.currentUser?.uid;
+      if (uid == null) return null;
+
+      final snap = await _firestore
+          .collection('connections')
+          .where('fromUid', isEqualTo: senderUid)
+          .where('toUid', isEqualTo: uid)
+          .where('status', isEqualTo: 'pending')
+          .limit(1)
+          .get();
+
+      if (snap.docs.isEmpty) return null;
+      return {...snap.docs.first.data(), 'id': snap.docs.first.id};
+    } catch (e) {
+      return null;
+    }
+  }
+
+
 }
